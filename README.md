@@ -2,10 +2,14 @@
 
 > A full-stack web application that classifies email text as **Spam** or **Ham (Legitimate)** using Machine Learning and Natural Language Processing, with an interactive browser-based dashboard.
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-46E3B7?logo=render)](https://email-spam-classifier-he7t.onrender.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0%2B-lightgrey)](https://flask.palletsprojects.com/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5%2B-orange)](https://scikit-learn.org/)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.6.1-orange)](https://scikit-learn.org/)
 
+🌐 **Live App:** https://email-spam-classifier-he7t.onrender.com
+
+> **Note:** Hosted on Render free tier — may take 30–60 seconds to wake up after inactivity.
 
 ---
 
