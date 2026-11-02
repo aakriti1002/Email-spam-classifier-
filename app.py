@@ -389,22 +389,36 @@ def upload_file():
 
 
 # ──────────────────────────────────────────────
-# Startup
+# Application startup — runs regardless of how the
+# app is started (Gunicorn, python app.py, pytest…)
 # ──────────────────────────────────────────────
-if __name__ == "__main__":
+def _startup():
+    """
+    Initialise everything required before the first request.
+    Called at module level so Gunicorn workers execute it on import.
+    """
     import logging
-    log = logging.getLogger("werkzeug")
-    log.setLevel(logging.ERROR)          # suppress request logs & reload banner
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
+    # 1. NLTK corpora
     ensure_nltk_data()
+
+    # 2. Database schema — CREATE TABLE IF NOT EXISTS is idempotent
     init_db()
 
+    # 3. Pre-load ML model into memory
     if not load_model():
-        print("\n[!] Model not found. Running train_model.py automatically...\n")
-        import subprocess, sys
-        subprocess.run([sys.executable, "train_model.py"], check=True)
-        load_model()
+        print("[WARNING] Model files not found — prediction API will return 503 "
+              "until train_model.py is run.")
 
+
+_startup()
+
+
+# ──────────────────────────────────────────────
+# Dev-server entry point (python app.py)
+# ──────────────────────────────────────────────
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print("\n================================================")
     print("  AI Email Spam Classifier")
