@@ -10,11 +10,12 @@ import re
 import os
 import nltk
 
-# Register the project-local nltk_data/ directory so pre-downloaded
-# corpora (from the build step) are found at runtime on any platform.
-_NLTK_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nltk_data")
-if os.path.isdir(_NLTK_LOCAL) and _NLTK_LOCAL not in nltk.data.path:
-    nltk.data.path.insert(0, _NLTK_LOCAL)
+# ~/nltk_data is NLTK's own default search path and always writable.
+# Render blocks downloads to world/group-writable project dirs,
+# so we MUST use the home directory.
+_NLTK_HOME = os.path.expanduser("~/nltk_data")
+if _NLTK_HOME not in nltk.data.path:
+    nltk.data.path.insert(0, _NLTK_HOME)
 
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer, WordNetLemmatizer
@@ -24,19 +25,21 @@ from nltk.tokenize import word_tokenize
 # NLTK resource bootstrap (run once)
 # ──────────────────────────────────────────────
 def ensure_nltk_data():
-    """Download required NLTK corpora if missing."""
+    """Download required NLTK corpora to ~/nltk_data if missing."""
+    _dl_dir = os.path.expanduser("~/nltk_data")
+    os.makedirs(_dl_dir, exist_ok=True)
     resources = [
-        ("tokenizers/punkt", "punkt"),
+        ("tokenizers/punkt",     "punkt"),
         ("tokenizers/punkt_tab", "punkt_tab"),
-        ("corpora/stopwords", "stopwords"),
-        ("corpora/wordnet", "wordnet"),
-        ("corpora/omw-1.4", "omw-1.4"),
+        ("corpora/stopwords",    "stopwords"),
+        ("corpora/wordnet",      "wordnet"),
+        ("corpora/omw-1.4",      "omw-1.4"),
     ]
     for path, name in resources:
         try:
             nltk.data.find(path)
         except LookupError:
-            nltk.download(name, quiet=True)
+            nltk.download(name, download_dir=_dl_dir, quiet=True)
 
 ensure_nltk_data()
 

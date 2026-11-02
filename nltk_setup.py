@@ -1,28 +1,22 @@
 """
 nltk_setup.py
 -------------
-Downloads all required NLTK corpora to a predictable local directory.
-Run this as part of the Render build command BEFORE starting Gunicorn.
+Downloads all required NLTK corpora.
+Run during Render build step BEFORE starting Gunicorn.
 
-Usage:
-    python nltk_setup.py
-
-This ensures NLTK data is available when Gunicorn workers start,
-preventing the silent hang that occurs when downloads happen
-inside worker subprocesses.
+Uses ~/nltk_data (home directory) which is:
+  1. Always writable on every platform
+  2. NLTK's own default search path (no extra config needed)
+  3. NOT blocked by Render's group-writable security check
+     (the project dir /opt/render/project/src/ is blocked)
 """
 
 import os
 import nltk
 
-# Store NLTK data inside the project directory so it is predictable
-# on all platforms and does not depend on the user's home directory.
-NLTK_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nltk_data")
+# Home directory — NLTK's default, always writable on Render
+NLTK_DATA_DIR = os.path.expanduser("~/nltk_data")
 os.makedirs(NLTK_DATA_DIR, exist_ok=True)
-
-# Tell NLTK to look here first
-if NLTK_DATA_DIR not in nltk.data.path:
-    nltk.data.path.insert(0, NLTK_DATA_DIR)
 
 REQUIRED = [
     ("tokenizers/punkt",     "punkt"),
