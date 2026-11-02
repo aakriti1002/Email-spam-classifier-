@@ -51,6 +51,8 @@ All features listed below are implemented and verified in the source code.
 | Feature | Description |
 |---|---|
 | **Spam / Ham Classification** | Classifies pasted or uploaded email text in real time |
+| **Image-Based Spam Detection** | Analyses screenshots of emails (JPG, PNG, WEBP) using Tesseract OCR and LinearSVC ML |
+| **Interactive OCR Workspace** | Inspects OCR character clarity, allows inline text editing, and re-analyses edited text |
 | **Confidence Score** | Returns a percentage confidence for each prediction |
 | **Risk Score (0–100)** | Composite security score combining ML confidence, URL analysis, and phishing patterns |
 | **Phishing Detection** | 15 regex-based phishing pattern checks (click bait, account suspension, prize claims, etc.) |
@@ -79,6 +81,8 @@ All features listed below are implemented and verified in the source code.
 | NLP preprocessing | NLTK 3.8+ (punkt, wordnet, stopwords, omw-1.4) |
 | Model serialisation | joblib 1.4+ |
 | Data processing | pandas 2.2+, numpy 1.26+ |
+| OCR Engine | Tesseract OCR 5.x (`pytesseract 0.3.13`) |
+| Computer Vision & Preprocessing | OpenCV (`opencv-python-headless`), Pillow (`PIL 10+`) |
 | Database | SQLite (via Python `sqlite3`, built-in) |
 | HTTP server | Werkzeug 3.0+ (Flask's built-in dev server) |
 
@@ -399,6 +403,43 @@ Training metrics, model comparison, and top spam features.
 
 ### `POST /api/upload`
 Upload a `.txt` file; returns its text content.
+
+### `POST /api/analyze-image`
+Upload an email screenshot (JPG, PNG, WEBP $\le 5$ MB). Preprocesses with OpenCV, extracts text via Tesseract OCR, extracts email headers, and classifies using the LinearSVC model.
+
+**Request:** `multipart/form-data` with `image` file field.
+
+**Response:**
+```json
+{
+  "prediction": "Spam",
+  "confidence": 74.35,
+  "riskScore": 68,
+  "riskStatus": "High Risk",
+  "ocrText": "Congratulations! You won $1,000,000...",
+  "ocrConfidence": 89.2,
+  "ocrConfidenceAvailable": true,
+  "emailFields": { "sender": "lottery@promo.com", "subject": "Claim Prize" },
+  "wordCount": 42,
+  "analysisType": "image",
+  "reasons": ["Financial reward keywords detected: prize, won"],
+  "highlightedWords": ["prize", "won"],
+  "phishingDetected": true,
+  "urlAnalysis": { "count": 1, "suspicious": 0, "shortened": 1 }
+}
+```
+
+### `POST /api/analyze-extracted-text`
+Re-analyse corrected or edited OCR text through the ML classification pipeline.
+
+**Request body:**
+```json
+{ "text": "Corrected email text...", "source": "edited" }
+```
+
+### `GET /api/ocr-status`
+Inspect OCR readiness, binary availability, and Tesseract engine version.
+
 
 ---
 
