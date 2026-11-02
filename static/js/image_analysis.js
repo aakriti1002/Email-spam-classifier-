@@ -5,14 +5,17 @@
  *  - Image drag-and-drop upload zone
  *  - Image preview with remove button
  *  - POST /api/analyze-image
- *  - OCR text display (editable textarea)
+ *  - Left column: OCR-extracted text editor + metadata
+ *  - Right column: Compact, organized ML prediction and security result panel
  *  - POST /api/analyze-extracted-text (re-analyse edited OCR)
- *  - Results rendering (reuses existing CSS classes)
  *
- * NOTE: This file depends on dashboard.js being loaded first.
- * It reads showSpinner(), showToast(), escHtml(), highlightWords(),
- * buildUrlSection(), renderResult(), state from dashboard.js.
+ * NOTE: Depends on dashboard.js being loaded first for helper utilities:
+ *   escHtml(), highlightWords(), buildUrlSection(), showToast(), state.
  */
+
+let _selectedImageFile = null;
+let _originalOcrText = "";
+let _lastImageAnalysisData = null;
 
 /* ══════════════════════════════════════════════════════════════
    IMAGE SECTION INIT
@@ -20,7 +23,7 @@
 function initImageAnalysis() {
   initImgDropZone();
   bindImgAnalyzeBtn();
-  bindReanalyzeBtn();
+  bindImgClearBtn();
   checkOcrStatus();
 }
 
@@ -37,41 +40,34 @@ async function checkOcrStatus() {
       banner.innerHTML = `
         <span class="ocr-status-badge ocr-success">
           <i class="bi bi-check-circle-fill"></i>
-          OCR Ready — Tesseract ${data.tesseract_version || ""}
+          OCR Engine Active ${data.tesseract_version ? "· v" + data.tesseract_version : ""}
         </span>`;
     } else {
       const missing = [];
       if (!data.pillow) missing.push("Pillow");
       if (!data.pytesseract) missing.push("pytesseract");
-      if (!data.tesseract_engine) missing.push("Tesseract engine");
+      if (!data.tesseract_engine) missing.push("Tesseract binary");
       banner.innerHTML = `
         <span class="ocr-status-badge ocr-warning">
           <i class="bi bi-exclamation-triangle-fill"></i>
-          OCR components missing: ${missing.join(", ")}
-        </span>
-        <span class="text-muted-sm ms-2" style="font-size:.72rem">
-          Image analysis may not work until these are installed.
+          OCR Engine: ${missing.join(", ")} missing
         </span>`;
     }
   } catch {
     banner.innerHTML = `
       <span class="ocr-status-badge ocr-warning">
         <i class="bi bi-question-circle"></i>
-        OCR status unknown
+        OCR Status: Standalone
       </span>`;
   }
 }
 
 /* ══════════════════════════════════════════════════════════════
-   IMAGE DROP ZONE
+   IMAGE DROP ZONE & PREVIEW
 ══════════════════════════════════════════════════════════════ */
-let _selectedImageFile = null;
-
 function initImgDropZone() {
-  const zone     = document.getElementById("imgDropZone");
-  const input    = document.getElementById("imgFileInput");
-  const preview  = document.getElementById("imgPreview");
-  const previewW = document.getElementById("imgPreviewWrap");
+  const zone      = document.getElementById("imgDropZone");
+  const input     = document.getElementById("imgFileInput");
   const removeBtn = document.getElementById("imgRemoveBtn");
 
   if (!zone || !input) return;
@@ -120,9 +116,9 @@ function _loadImageFile(file) {
 
   _selectedImageFile = file;
 
-  const zone     = document.getElementById("imgDropZone");
-  const preview  = document.getElementById("imgPreview");
-  const previewW = document.getElementById("imgPreviewWrap");
+  const zone        = document.getElementById("imgDropZone");
+  const preview     = document.getElementById("imgPreview");
+  const previewW    = document.getElementById("imgPreviewWrap");
   const placeholder = document.getElementById("imgDropPlaceholder");
 
   const reader = new FileReader();
@@ -137,31 +133,54 @@ function _loadImageFile(file) {
   };
   reader.readAsDataURL(file);
 
-  // Reset any previous results
+  // Clear previous results when new image loaded
   _clearImageResults();
 }
 
 function _clearImage() {
   _selectedImageFile = null;
-  const zone      = document.getElementById("imgDropZone");
-  const preview   = document.getElementById("imgPreview");
-  const previewW  = document.getElementById("imgPreviewWrap");
-  const placeholder = document.getElementById("imgDropPlaceholder");
-  const input     = document.getElementById("imgFileInput");
+  _originalOcrText = "";
+  _lastImageAnalysisData = null;
 
-  if (preview) { preview.src = ""; preview.style.display = "none"; }
+  const zone        = document.getElementById("imgDropZone");
+  const preview     = document.getElementById("imgPreview");
+  const previewW    = document.getElementById("imgPreviewWrap");
+  const placeholder = document.getElementById("imgDropPlaceholder");
+  const input       = document.getElementById("imgFileInput");
+
+  if (preview) {
+    preview.src = "";
+    preview.style.display = "none";
+  }
   previewW?.classList.add("d-none");
   placeholder?.classList.remove("d-none");
   zone?.classList.remove("has-image");
   if (input) input.value = "";
+
   _clearImageResults();
 }
 
 function _clearImageResults() {
   const ocrSection = document.getElementById("ocrResultSection");
   const mlSection  = document.getElementById("imgMlResultSection");
-  if (ocrSection) ocrSection.classList.add("d-none");
-  if (mlSection)  mlSection.classList.add("d-none");
+  const placeHolder = document.getElementById("imgResultPlaceholder");
+
+  if (ocrSection) {
+    ocrSection.innerHTML = "";
+    ocrSection.classList.add("d-none");
+  }
+  if (mlSection) {
+    mlSection.innerHTML = "";
+    mlSection.classList.add("d-none");
+  }
+  if (placeHolder) {
+    placeHolder.classList.remove("d-none");
+  }
+}
+
+function bindImgClearBtn() {
+  const btn = document.getElementById("imgClearBtn");
+  if (btn) btn.addEventListener("click", _clearImage);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -174,18 +193,17 @@ function bindImgAnalyzeBtn() {
 
 async function analyzeImage() {
   if (!_selectedImageFile) {
-    showToast("Please select or drop an image first.", "warning");
+    showToast("Please select or drop an email screenshot first.", "warning");
     return;
   }
 
-  showSpinner(true, "Processing Image…", [
-    "Validating image file",
-    "Preprocessing for OCR",
-    "Extracting text (Tesseract)",
-    "Running NLP pipeline",
-    "Computing risk score",
+  showSpinner(true, "Processing Email Screenshot…", [
+    "Validating image file & headers",
+    "Applying grayscale & CLAHE noise reduction",
+    "Extracting text via Tesseract OCR",
+    "Running NLP text cleaning & TF-IDF",
+    "LinearSVC model prediction & risk scoring",
   ]);
-  _clearImageResults();
 
   const formData = new FormData();
   formData.append("image", _selectedImageFile);
@@ -212,36 +230,37 @@ async function analyzeImage() {
     }
 
     renderImageResults(data);
+    showToast("Email screenshot analysed successfully!", "success");
+
+    // On small screens, scroll down to the results column smoothly
+    if (window.innerWidth < 992) {
+      document.getElementById("imgMlResultSection")?.scrollIntoView({ behavior: "smooth" });
+    }
   } catch (err) {
-    showToast(err.message || "Analysis failed.", "error");
+    showToast(err.message || "Image analysis failed.", "error");
   } finally {
     showSpinner(false);
   }
 }
 
 /* ══════════════════════════════════════════════════════════════
-   RE-ANALYSE EDITED TEXT
+   RE-ANALYSE EDITED OCR TEXT
 ══════════════════════════════════════════════════════════════ */
-function bindReanalyzeBtn() {
-  const btn = document.getElementById("reanalyzeBtn");
-  if (btn) btn.addEventListener("click", reanalyzeEditedText);
-}
-
 async function reanalyzeEditedText() {
   const ta = document.getElementById("ocrEditableText");
   if (!ta) return;
 
   const text = ta.value.trim();
   if (!text) {
-    showToast("The text area is empty. Please enter or correct the OCR text.", "warning");
+    showToast("Extracted text area is empty. Please enter text to analyse.", "warning");
     return;
   }
 
-  showSpinner(true, "Re-analysing Text…", [
-    "Running NLP preprocessing",
-    "TF-IDF vectorisation",
-    "Linear SVC classification",
-    "Risk score calculation",
+  showSpinner(true, "Re-analysing Edited Text…", [
+    "Running NLP text preprocessing",
+    "Extracting 5,000 TF-IDF features",
+    "LinearSVC model classification",
+    "Phishing pattern & risk score analysis",
   ]);
 
   try {
@@ -264,9 +283,13 @@ async function reanalyzeEditedText() {
       return;
     }
 
-    // Render ML result (reuse existing renderResult helper from dashboard.js)
+    // Update ML result in Right Column (keep user's edited text in Left Column)
     renderMlResultForImage(data, text);
-    showToast("Re-analysis complete (edited text).", "success");
+    showToast("Classification updated from edited text!", "success");
+
+    if (window.innerWidth < 992) {
+      document.getElementById("imgMlResultSection")?.scrollIntoView({ behavior: "smooth" });
+    }
   } catch (err) {
     showToast(err.message || "Re-analysis failed.", "error");
   } finally {
@@ -275,171 +298,194 @@ async function reanalyzeEditedText() {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   RENDER IMAGE ANALYSIS RESULTS
+   RENDER ALL RESULTS
 ══════════════════════════════════════════════════════════════ */
 function renderImageResults(data) {
+  _originalOcrText = data.ocrText || "";
+  _lastImageAnalysisData = data;
+
+  // Hide placeholder in right column
+  document.getElementById("imgResultPlaceholder")?.classList.add("d-none");
+
+  // Render OCR Editor in Left Column
   _renderOcrSection(data);
+
+  // Render ML Prediction in Right Column
   renderMlResultForImage(data, data.ocrText || "");
 }
 
+/* ── LEFT COLUMN: Render OCR Text Editor ────────────────────── */
 function _renderOcrSection(data) {
   const section = document.getElementById("ocrResultSection");
   if (!section) return;
 
-  // OCR confidence bar color
+  // OCR confidence bar
   const conf = data.ocrConfidence;
-  const confAvail = data.ocrConfidenceAvailable;
-  const confColor = conf === null ? "#94A3B8"
-    : conf >= 75 ? "#16A34A"
-    : conf >= 50 ? "#D97706"
-    : "#DC2626";
+  const confAvail = data.ocrConfidenceAvailable && conf !== null;
+  const confColor = conf === null ? "var(--gray-400)"
+    : conf >= 75 ? "var(--success)"
+    : conf >= 50 ? "var(--warning)"
+    : "var(--danger)";
 
-  const confHtml = confAvail && conf !== null
+  const confHtml = confAvail
     ? `<div class="ocr-confidence-row">
-         <span>OCR Confidence</span>
+         <span style="font-weight:600;font-size:.76rem">OCR Quality:</span>
          <div class="ocr-conf-bar-wrap">
            <div class="ocr-conf-bar" style="width:${conf}%;background:${confColor}"></div>
          </div>
-         <span style="color:${confColor};font-weight:600">${conf}%</span>
-       </div>
-       <div style="font-size:.72rem;color:var(--gray-500);margin-top:.2rem">
-         This is Tesseract character recognition confidence, separate from spam classification confidence.
+         <span style="color:${confColor};font-weight:700;font-size:.78rem">${conf}%</span>
        </div>`
-    : `<div style="font-size:.75rem;color:var(--gray-500)">
-         OCR character confidence data not available for this image.
-       </div>`;
+    : "";
 
-  // Email fields
+  // Detected email metadata tags
   const fields = data.emailFields || {};
-  const fieldRows = [
-    ["Sender",    fields.sender],
-    ["Recipient", fields.recipient],
-    ["Subject",   fields.subject],
-  ].filter(([, v]) => v)
-   .map(([label, val]) => `
-    <div class="email-field-row">
-      <span class="email-field-label">${label}</span>
-      <span class="email-field-value">${escHtml(val)}</span>
-    </div>`).join("");
+  const metaPills = [];
+  if (fields.sender) {
+    metaPills.push(`<div class="email-meta-chip"><span class="meta-label">From:</span> <span class="meta-val">${escHtml(fields.sender)}</span></div>`);
+  }
+  if (fields.subject) {
+    metaPills.push(`<div class="email-meta-chip"><span class="meta-label">Subject:</span> <span class="meta-val">${escHtml(fields.subject)}</span></div>`);
+  }
+  if (fields.recipient) {
+    metaPills.push(`<div class="email-meta-chip"><span class="meta-label">To:</span> <span class="meta-val">${escHtml(fields.recipient)}</span></div>`);
+  }
 
-  const metadataHtml = fieldRows
-    ? `<div class="mb-2">${fieldRows}</div>`
-    : `<div class="text-muted-sm mb-2">No sender/subject metadata detected in image.</div>`;
+  const metadataHtml = metaPills.length
+    ? `<div class="d-flex flex-column gap-1 mb-2">${metaPills.join("")}</div>`
+    : "";
+
+  const words = data.wordCount || (data.ocrText ? data.ocrText.trim().split(/\s+/).length : 0);
+  const chars = data.charCount || (data.ocrText ? data.ocrText.length : 0);
 
   section.innerHTML = `
-    <div class="card mb-3">
+    <div class="card">
       <div class="card-header-bar">
-        <span><i class="bi bi-file-text me-2 text-navy"></i>OCR Extraction Result</span>
-        <span class="text-muted-sm">${data.wordCount || 0} words extracted</span>
+        <span><i class="bi bi-pencil-square me-2 text-navy"></i>Extracted Text (OCR)</span>
+        <span class="text-muted-sm" id="ocrCountsBadge">${words} words · ${chars} chars</span>
       </div>
-      <div class="card-body-pad">
+      <div class="card-body-pad d-flex flex-column gap-2">
 
         ${confHtml}
-
-        <hr class="divider-soft my-2">
-
-        <div class="fw-600 mb-1" style="font-size:.84rem">
-          <i class="bi bi-envelope me-1 text-navy"></i>Detected Email Fields
-        </div>
         ${metadataHtml}
 
-        <div class="fw-600 mb-1 mt-2" style="font-size:.84rem">
-          <i class="bi bi-pencil me-1 text-navy"></i>Extracted Text
-          <span class="text-muted-sm ms-2" style="font-weight:400">
-            — Edit and click "Re-analyse" to correct OCR mistakes
-          </span>
-        </div>
-        <textarea id="ocrEditableText" class="ocr-textarea">${escHtml(data.ocrText || "")}</textarea>
-
-        <div class="confidence-note-box mt-2">
-          <strong>Note:</strong>
-          <strong>OCR confidence</strong> (Tesseract character recognition quality) and
-          <strong>ML confidence</strong> (spam classification certainty) are separate measurements
-          and are never combined.
+        <div class="d-flex justify-content-between align-items-center">
+          <label for="ocrEditableText" class="fw-600" style="font-size:.8rem;color:var(--gray-700)">
+            Editable Text Content:
+          </label>
+          <span class="text-muted-sm" style="font-size:.72rem">Edit to correct OCR typos</span>
         </div>
 
-        <div class="d-flex gap-2 mt-2">
-          <button class="btn-primary-navy" id="reanalyzeBtn" style="font-size:.82rem">
-            <i class="bi bi-arrow-repeat"></i> Re-analyse Edited Text
+        <textarea id="ocrEditableText" class="ocr-textarea" rows="7"
+          placeholder="Extracted email text will appear here…">${escHtml(data.ocrText || "")}</textarea>
+
+        <!-- Action buttons row -->
+        <div class="d-flex gap-2 mt-1">
+          <button class="btn-primary-navy flex-grow-1 justify-content-center" id="reanalyzeBtn" style="font-size:.82rem;padding:.45rem .8rem">
+            <i class="bi bi-arrow-repeat"></i>
+            Re-analyse Edited Text
           </button>
-          <button class="btn btn-sm btn-outline-secondary"
-                  onclick="document.getElementById('ocrEditableText').value = ${JSON.stringify(data.ocrText || "")}"
-                  style="font-size:.78rem">
-            <i class="bi bi-arrow-counterclockwise"></i> Reset
+          <button class="btn-outline-navy" id="resetOcrBtn" title="Reset to original OCR extraction" style="font-size:.82rem;padding:.45rem .75rem">
+            <i class="bi bi-arrow-counterclockwise"></i>
+            Reset
           </button>
         </div>
+
+        <div class="confidence-note-box mt-1">
+          <i class="bi bi-shield-check text-navy me-1"></i>
+          <strong>Separate Metrics:</strong> OCR Confidence measures character recognition clarity. ML Confidence measures LinearSVC spam certainty.
+        </div>
+
       </div>
     </div>`;
 
   section.classList.remove("d-none");
 
-  // Re-bind the reanalyze button (it was just re-created in the DOM)
-  const btn = document.getElementById("reanalyzeBtn");
-  if (btn) btn.addEventListener("click", reanalyzeEditedText);
+  // Bind actions
+  document.getElementById("reanalyzeBtn")?.addEventListener("click", reanalyzeEditedText);
+  document.getElementById("resetOcrBtn")?.addEventListener("click", () => {
+    const ta = document.getElementById("ocrEditableText");
+    if (ta) {
+      ta.value = _originalOcrText;
+      showToast("Reset to original OCR text.", "info");
+    }
+  });
+
+  // Dynamic character/word counter on input
+  document.getElementById("ocrEditableText")?.addEventListener("input", (e) => {
+    const val = e.target.value;
+    const w = val.trim() ? val.trim().split(/\s+/).length : 0;
+    const c = val.length;
+    const badge = document.getElementById("ocrCountsBadge");
+    if (badge) badge.textContent = `${w} words · ${c} chars`;
+  });
 }
 
+/* ── RIGHT COLUMN: Render ML Prediction & Risk Results ─────── */
 function renderMlResultForImage(data, rawText) {
+  _lastImageAnalysisData = data;
   const section = document.getElementById("imgMlResultSection");
   if (!section) return;
 
-  // Reuse the existing renderResult HTML builder from dashboard.js
-  // by temporarily pointing it at imgMlResultSection
-  const isSpam    = data.prediction === "Spam";
+  const isSpam     = data.prediction === "Spam";
   const colorClass = isSpam ? "spam" : "ham";
   const icon       = isSpam ? "bi-shield-x" : "bi-shield-check";
-  const riskClass  = data.riskColor;
-  const circumference = 2 * Math.PI * 44;
-  const offset = circumference - (data.riskScore / 100) * circumference;
+  const riskClass  = data.riskColor || (isSpam ? "danger" : "success");
+  const circumference = 2 * Math.PI * 44; // radius 44
+  const offset = circumference - ((data.riskScore || 0) / 100) * circumference;
 
   const highlightedBody = highlightWords(rawText, data.highlightedWords || []);
   const urlSection = buildUrlSection(data.urlAnalysis);
 
   const phishSection = data.phishingDetected
-    ? `<div class="phish-alert mt-3">
-        <i class="bi bi-exclamation-triangle-fill"></i>
+    ? `<div class="phish-alert mb-3">
+        <i class="bi bi-exclamation-triangle-fill flex-shrink-0 fs-5"></i>
         <div>
-          <strong>Phishing Warning Detected</strong>
-          <div class="mt-1" style="color:var(--gray-700)">
-            ${data.phishingPatterns.map((p) => `<span class="d-block">• ${p}</span>`).join("")}
+          <strong style="font-size:.84rem">Phishing Indicators Detected</strong>
+          <div class="mt-1" style="font-size:.78rem;line-height:1.6">
+            ${(data.phishingPatterns || []).map((p) => `<div>• ${escHtml(p)}</div>`).join("")}
           </div>
         </div>
       </div>`
     : "";
 
-  const reasonsHtml = (data.reasons || [])
-    .map((r) => `
-      <div class="reason-item ${isSpam ? "" : "ham"}">
-        <i class="bi ${isSpam ? "bi-x-circle-fill" : "bi-check-circle-fill"}"></i>
-        <span>${escHtml(r)}</span>
-      </div>`).join("");
+  const reasonsHtml = (data.reasons || []).map((r) => `
+    <div class="reason-item ${isSpam ? "" : "ham"}">
+      <i class="bi ${isSpam ? "bi-x-circle-fill text-danger" : "bi-check-circle-fill text-success"}"></i>
+      <span>${escHtml(r)}</span>
+    </div>`).join("");
 
-  // Analysis type banner
-  const typeLabel = data.analysisType === "image_edited"
-    ? "Re-analysed from edited OCR text"
-    : "Analysed from OCR-extracted text";
+  const sourceBadge = data.analysisType === "image_edited"
+    ? `<span class="badge bg-light text-navy border" style="font-weight:500;font-size:.72rem"><i class="bi bi-pencil me-1"></i>From Edited OCR Text</span>`
+    : `<span class="badge bg-light text-navy border" style="font-weight:500;font-size:.72rem"><i class="bi bi-image me-1"></i>From OCR Extraction</span>`;
 
   section.innerHTML = `
-    <div class="result-header-img-strip">
-      <i class="bi bi-image text-navy"></i>
-      <span>${typeLabel}</span>
-    </div>
     <div class="result-card">
-      <div class="result-header ${colorClass}">
-        <i class="bi ${icon} fs-3 ${isSpam ? "text-danger" : "text-success"}"></i>
-        <div class="flex-grow-1">
-          <div class="result-label ${colorClass}">${data.prediction.toUpperCase()}</div>
-          <div class="text-muted-sm mt-1">Email classified as ${data.prediction}</div>
+      <!-- 1. Header Banner -->
+      <div class="result-header ${colorClass} d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+          <i class="bi ${icon} fs-2 ${isSpam ? "text-danger" : "text-success"}"></i>
+          <div>
+            <div class="result-label ${colorClass}">${data.prediction.toUpperCase()}</div>
+            <div class="text-muted-sm" style="font-size:.78rem">
+              ${isSpam ? "Unsolicited or malicious spam detected" : "Legitimate email content verified"}
+            </div>
+          </div>
         </div>
-        <div class="confidence-pill">${data.confidence}% ML confidence</div>
+        <div class="d-flex align-items-center gap-2">
+          ${sourceBadge}
+          <div class="confidence-pill" style="font-size:.82rem">${data.confidence}% ML Confidence</div>
+        </div>
       </div>
 
+      <!-- 2. Body Grid -->
       <div class="p-3">
-        <div class="row g-3 align-items-start">
-          <!-- Risk ring -->
+        <!-- Top Metrics Row with Risk Ring Gauge -->
+        <div class="row g-3 align-items-center mb-3">
+          <!-- Risk score gauge -->
           <div class="col-auto">
             <div class="risk-ring-wrap">
               <div class="risk-ring">
-                <svg width="110" height="110" viewBox="0 0 110 110">
+                <svg width="100" height="100" viewBox="0 0 110 110">
                   <circle class="risk-ring-bg" cx="55" cy="55" r="44"/>
                   <circle class="risk-ring-fill ${riskClass}"
                     cx="55" cy="55" r="44"
@@ -448,84 +494,97 @@ function renderMlResultForImage(data, rawText) {
                     id="imgRiskRingFill"/>
                 </svg>
                 <div class="risk-ring-text">
-                  <span id="imgRiskScoreNum">0</span>
-                  <small>/100</small>
+                  <span id="imgRiskScoreNum" style="font-size:1.35rem">0</span>
+                  <small style="font-size:.65rem">/100</small>
                 </div>
               </div>
-              <span class="risk-status-label ${riskClass}">${data.riskStatus}</span>
+              <span class="risk-status-label ${riskClass} mt-1">${data.riskStatus || (isSpam ? "High Risk" : "Safe")}</span>
             </div>
           </div>
 
-          <!-- Metrics -->
+          <!-- Key metric cards -->
           <div class="col">
-            <div class="row g-2 mb-3">
-              <div class="col-6">
-                <div class="p-2 rounded" style="background:var(--gray-50);border:1px solid var(--gray-200)">
-                  <div class="text-muted-sm">Prediction</div>
-                  <div class="fw-700 ${isSpam ? "text-danger" : "text-success"}">${data.prediction}</div>
+            <div class="row g-2">
+              <div class="col-6 col-sm-3">
+                <div class="p-2 rounded bg-light border text-center">
+                  <div class="text-muted-sm" style="font-size:.7rem">Classification</div>
+                  <div class="fw-700 ${isSpam ? "text-danger" : "text-success"}" style="font-size:.9rem">${data.prediction}</div>
                 </div>
               </div>
-              <div class="col-6">
-                <div class="p-2 rounded" style="background:var(--gray-50);border:1px solid var(--gray-200)">
-                  <div class="text-muted-sm">ML Confidence</div>
-                  <div class="fw-700">${data.confidence}%</div>
+              <div class="col-6 col-sm-3">
+                <div class="p-2 rounded bg-light border text-center">
+                  <div class="text-muted-sm" style="font-size:.7rem">ML Confidence</div>
+                  <div class="fw-700 text-navy" style="font-size:.9rem">${data.confidence}%</div>
                 </div>
               </div>
-              <div class="col-6">
-                <div class="p-2 rounded" style="background:var(--gray-50);border:1px solid var(--gray-200)">
-                  <div class="text-muted-sm">Risk Score</div>
-                  <div class="fw-700">${data.riskScore} / 100</div>
+              <div class="col-6 col-sm-3">
+                <div class="p-2 rounded bg-light border text-center">
+                  <div class="text-muted-sm" style="font-size:.7rem">Risk Index</div>
+                  <div class="fw-700" style="font-size:.9rem">${data.riskScore}/100</div>
                 </div>
               </div>
-              <div class="col-6">
-                <div class="p-2 rounded" style="background:var(--gray-50);border:1px solid var(--gray-200)">
-                  <div class="text-muted-sm">URLs Found</div>
-                  <div class="fw-700">${data.urlAnalysis?.count ?? 0}</div>
+              <div class="col-6 col-sm-3">
+                <div class="p-2 rounded bg-light border text-center">
+                  <div class="text-muted-sm" style="font-size:.7rem">URLs Found</div>
+                  <div class="fw-700" style="font-size:.9rem">${data.urlAnalysis?.count ?? 0}</div>
                 </div>
               </div>
             </div>
 
-            <!-- ML confidence note -->
-            <div class="confidence-note-box">
-              <strong>ML confidence note:</strong>
-              The ${data.confidence}% figure is derived from the LinearSVC decision function
-              via a sigmoid transform — it is a relative certainty estimate, not a calibrated
-              probability.
+            <!-- LinearSVC confidence note -->
+            <div class="text-muted-sm mt-2" style="font-size:.72rem;line-height:1.5">
+              <i class="bi bi-info-circle me-1"></i>Confidence is estimated from the LinearSVC hyperplane distance via sigmoid transform.
             </div>
           </div>
         </div>
 
+        <!-- Phishing Alert Section (conditional) -->
         ${phishSection}
-        <hr class="divider-soft">
 
-        <!-- Reasons (XAI) -->
+        <!-- Explainability (XAI) Reasons -->
         <div class="mb-3">
-          <div class="fw-600 mb-2" style="font-size:.88rem">
-            <i class="bi bi-lightbulb me-1 text-navy"></i>Explainability — Why this result?
+          <div class="fw-600 mb-2 d-flex align-items-center gap-1" style="font-size:.84rem;color:var(--navy-dark)">
+            <i class="bi bi-lightbulb text-navy"></i>
+            <span>Explainable AI — Classification Factors</span>
           </div>
-          ${reasonsHtml}
-        </div>
-
-        ${urlSection}
-
-        <!-- Highlighted extracted text -->
-        <div>
-          <div class="fw-600 mb-2" style="font-size:.88rem">
-            <i class="bi bi-file-text me-1 text-navy"></i>OCR Extracted Content
-            <span class="text-muted-sm ms-2">(spam keywords highlighted in red)</span>
-          </div>
-          <div class="email-body-display p-3 rounded"
-               style="background:var(--gray-50);border:1px solid var(--gray-200);font-size:.82rem;
-                      line-height:1.8;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;">
-            ${highlightedBody}
+          <div class="d-flex flex-column gap-1">
+            ${reasonsHtml}
           </div>
         </div>
+
+        <!-- URL Analysis (if URLs detected) -->
+        ${urlSection ? `<div class="mb-3">${urlSection}</div>` : ""}
+
+        <!-- Highlighted Extracted Content Display -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="fw-600" style="font-size:.84rem;color:var(--navy-dark)">
+              <i class="bi bi-file-text me-1 text-navy"></i>Analysed Text Content
+            </span>
+            <span class="text-muted-sm" style="font-size:.72rem">Suspicious terms highlighted</span>
+          </div>
+          <div class="email-body-display p-2 rounded border"
+               style="background:var(--gray-50);font-size:.8rem;line-height:1.7;max-height:160px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;">
+            ${highlightedBody || escHtml(rawText)}
+          </div>
+        </div>
+
+        <!-- Action Toolbar -->
+        <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+          <button class="btn btn-sm btn-outline-secondary" onclick="copyImageAnalysisResult()">
+            <i class="bi bi-clipboard me-1"></i>Copy Result
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="printImageAnalysisResult()">
+            <i class="bi bi-printer me-1"></i>Print Report
+          </button>
+        </div>
+
       </div>
     </div>`;
 
   section.classList.remove("d-none");
 
-  // Animate risk ring
+  // Animate risk ring and counter
   requestAnimationFrame(() => {
     setTimeout(() => {
       const ring = document.getElementById("imgRiskRingFill");
@@ -533,7 +592,7 @@ function renderMlResultForImage(data, rawText) {
       if (ring) ring.style.strokeDashoffset = offset;
       if (numEl) {
         let cur = 0;
-        const target = data.riskScore;
+        const target = data.riskScore || 0;
         const step = () => {
           cur = Math.min(cur + 2, target);
           numEl.textContent = cur;
@@ -541,16 +600,40 @@ function renderMlResultForImage(data, rawText) {
         };
         requestAnimationFrame(step);
       }
-    }, 100);
+    }, 80);
   });
 }
 
 /* ══════════════════════════════════════════════════════════════
-   SPINNER OVERRIDE
-   Override showSpinner to show OCR-specific steps
+   TOOLBAR ACTIONS: COPY & PRINT
 ══════════════════════════════════════════════════════════════ */
-const _origShowSpinner = typeof showSpinner === "function" ? showSpinner : null;
+function copyImageAnalysisResult() {
+  if (!_lastImageAnalysisData) return;
+  const d = _lastImageAnalysisData;
+  const summary = [
+    `=== AI Email Spam Classifier — Image Analysis Report ===`,
+    `Prediction: ${d.prediction}`,
+    `ML Confidence: ${d.confidence}%`,
+    `Risk Score: ${d.riskScore}/100 (${d.riskStatus})`,
+    `Phishing Detected: ${d.phishingDetected ? "YES" : "NO"}`,
+    `URLs Found: ${d.urlAnalysis?.count || 0}`,
+    `Reasons: ${(d.reasons || []).join(" | ")}`,
+  ].join("\n");
 
+  navigator.clipboard.writeText(summary).then(() => {
+    showToast("Analysis summary copied to clipboard!", "success");
+  }).catch(() => {
+    showToast("Failed to copy to clipboard.", "warning");
+  });
+}
+
+function printImageAnalysisResult() {
+  window.print();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SPINNER OVERRIDE (Animated pipeline step list)
+══════════════════════════════════════════════════════════════ */
 function showSpinner(visible, title = "Analysing Email…", steps = []) {
   const overlay = document.getElementById("spinnerOverlay");
   if (!overlay) return;
@@ -565,31 +648,27 @@ function showSpinner(visible, title = "Analysing Email…", steps = []) {
       stepsEl.innerHTML = `<ul class="ocr-pipeline-steps">
         ${steps.map((s, i) => `
           <li class="${i === 0 ? "step-active" : ""}">
-            <i class="bi ${i === 0 ? "bi-arrow-right-circle-fill" : "bi-circle"}"></i>
+            <i class="bi ${i === 0 ? "bi-arrow-right-circle-fill text-navy" : "bi-circle"}"></i>
             ${s}
           </li>`).join("")}
       </ul>`;
 
-      // Animate steps
       steps.forEach((_, i) => {
         setTimeout(() => {
           const items = stepsEl.querySelectorAll("li");
           items.forEach((el, j) => {
-            el.className = j < i ? "step-done"
-              : j === i ? "step-active"
-              : "";
+            el.className = j < i ? "step-done" : j === i ? "step-active" : "";
             const icon = el.querySelector("i");
             if (icon) {
-              icon.className = j < i ? "bi bi-check-circle-fill"
-                : j === i ? "bi bi-arrow-right-circle-fill"
+              icon.className = j < i ? "bi bi-check-circle-fill text-success"
+                : j === i ? "bi bi-arrow-right-circle-fill text-navy"
                 : "bi bi-circle";
             }
           });
-        }, i * 600);
+        }, i * 500);
       });
     }
   } else {
     overlay.style.display = "none";
   }
 }
-

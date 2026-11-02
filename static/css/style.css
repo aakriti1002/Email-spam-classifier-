@@ -1404,19 +1404,49 @@ mark.spam-word {
 
 /* ============================================================
    IMAGE ANALYSIS SECTION STYLES
-   image-spam-analysis feature — appended to style.css
+   image-spam-analysis feature — refined responsive layout
    ============================================================ */
+
+/* ── Compact Pipeline Flow Strip ────────────────────────── */
+.img-pipeline-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+  padding: .6rem .85rem;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: .76rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.pipeline-flow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.pipeline-flow-pill i {
+  font-size: .85rem;
+}
 
 /* ── Image Upload Drop Zone ─────────────────────────────── */
 .img-upload-zone {
-  border: 2px dashed var(--gray-300, #D1D5DB);
+  border: 2px dashed var(--gray-200);
   border-radius: var(--radius);
-  padding: 2rem 1rem;
+  padding: 1.5rem 1rem;
   text-align: center;
   cursor: pointer;
   transition: border-color var(--transition), background var(--transition);
   background: var(--gray-50);
   position: relative;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .img-upload-zone:hover,
@@ -1427,74 +1457,80 @@ mark.spam-word {
 
 .img-upload-zone.has-image {
   border-style: solid;
-  border-color: var(--navy);
-  padding: .75rem;
+  border-color: var(--navy-light);
+  padding: .5rem;
+  background: var(--white);
 }
 
 .img-upload-zone .upload-icon {
-  font-size: 2.5rem;
-  color: var(--gray-400);
+  font-size: 2.2rem;
+  color: var(--navy);
+  opacity: .7;
   display: block;
-  margin-bottom: .5rem;
+  margin-bottom: .35rem;
 }
 
 .img-upload-zone .upload-title {
   font-weight: 600;
-  font-size: .9rem;
+  font-size: .86rem;
   color: var(--gray-700);
 }
 
 .img-upload-zone .upload-sub {
-  font-size: .78rem;
+  font-size: .74rem;
   color: var(--gray-500);
-  margin-top: .25rem;
+  margin-top: .15rem;
 }
 
 /* ── Image Preview Container ─────────────────────────────── */
 #imgPreviewWrap {
   position: relative;
-  display: inline-block;
+  display: block;
   width: 100%;
 }
 
 #imgPreview {
   max-width: 100%;
-  max-height: 280px;
+  max-height: 180px;
   border-radius: calc(var(--radius) - 2px);
   object-fit: contain;
   display: block;
   margin: 0 auto;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
 }
 
 .img-remove-btn {
   position: absolute;
-  top: .4rem;
-  right: .4rem;
-  background: rgba(220,38,38,.85);
+  top: -.25rem;
+  right: -.25rem;
+  background: var(--danger);
   color: #fff;
-  border: none;
+  border: 2px solid #fff;
   border-radius: 50%;
-  width: 26px;
-  height: 26px;
-  font-size: .8rem;
+  width: 24px;
+  height: 24px;
+  font-size: .75rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  transition: background var(--transition);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  transition: transform var(--transition);
 }
 
-.img-remove-btn:hover { background: var(--danger); }
+.img-remove-btn:hover {
+  transform: scale(1.1);
+}
 
 /* ── OCR Status Badge ────────────────────────────────────── */
 .ocr-status-badge {
   display: inline-flex;
   align-items: center;
   gap: .4rem;
-  font-size: .76rem;
+  font-size: .75rem;
   font-weight: 600;
-  padding: .25rem .65rem;
+  padding: .22rem .65rem;
   border-radius: 999px;
   border: 1px solid transparent;
 }
@@ -1522,21 +1558,24 @@ mark.spam-word {
   display: flex;
   align-items: center;
   gap: .5rem;
-  font-size: .78rem;
-  color: var(--gray-600, var(--gray-500));
-  margin-top: .4rem;
+  font-size: .76rem;
+  color: var(--gray-700);
+  padding: .35rem .6rem;
+  background: var(--gray-50);
+  border-radius: 6px;
+  border: 1px solid var(--gray-200);
 }
 
 .ocr-conf-bar-wrap {
   flex: 1;
   background: var(--gray-200);
   border-radius: 999px;
-  height: 5px;
+  height: 6px;
   overflow: hidden;
 }
 
 .ocr-conf-bar {
-  height: 5px;
+  height: 6px;
   border-radius: 999px;
   transition: width .8s ease;
 }
@@ -1544,70 +1583,76 @@ mark.spam-word {
 /* ── Editable OCR Textarea ───────────────────────────────── */
 .ocr-textarea {
   width: 100%;
-  min-height: 160px;
-  padding: .75rem;
-  font-size: .82rem;
-  line-height: 1.7;
+  min-height: 130px;
+  padding: .65rem .75rem;
+  font-size: .81rem;
+  line-height: 1.65;
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   resize: vertical;
   font-family: var(--font);
   color: var(--gray-900);
   background: var(--white);
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .ocr-textarea:focus {
   outline: none;
   border-color: var(--navy);
+  box-shadow: 0 0 0 2px rgba(63,124,168,.15);
 }
 
-/* ── Email Field Pills ───────────────────────────────────── */
-.email-field-row {
+/* ── Email Metadata Chips ────────────────────────────────── */
+.email-meta-chip {
   display: flex;
-  gap: .4rem;
   align-items: baseline;
-  font-size: .8rem;
-  padding: .3rem 0;
-  border-bottom: 1px solid var(--gray-100, var(--gray-200));
+  gap: .4rem;
+  font-size: .76rem;
+  padding: .2rem .4rem;
+  background: var(--gray-50);
+  border-radius: 4px;
+  border: 1px solid var(--gray-200);
 }
 
-.email-field-label {
+.email-meta-chip .meta-label {
   font-weight: 700;
-  color: var(--navy);
-  min-width: 70px;
+  color: var(--navy-dark);
+  min-width: 52px;
   flex-shrink: 0;
 }
 
-.email-field-value {
+.email-meta-chip .meta-val {
   color: var(--gray-700);
   word-break: break-all;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
-/* ── OCR vs ML confidence separator note ──────────────────── */
+/* ── Confidence Note Box ─────────────────────────────────── */
 .confidence-note-box {
   background: var(--navy-50, #EFF5F9);
   border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
-  padding: .6rem .85rem;
-  font-size: .76rem;
-  color: var(--gray-700);
-  line-height: 1.6;
+  border-radius: 6px;
+  padding: .45rem .65rem;
+  font-size: .72rem;
+  color: var(--gray-600);
+  line-height: 1.5;
 }
 
-.confidence-note-box strong { color: var(--navy); }
+.confidence-note-box strong {
+  color: var(--navy-dark);
+}
 
-/* ── Image Result Card header strip ─────────────────────── */
-.result-header-img-strip {
-  display: flex;
-  align-items: center;
-  gap: .75rem;
-  padding: .6rem .9rem;
-  background: var(--gray-100);
-  border-radius: var(--radius) var(--radius) 0 0;
-  font-size: .78rem;
-  color: var(--gray-600, var(--gray-500));
-  border-bottom: 1px solid var(--gray-200);
+/* ── Image Result Card Header Banner ─────────────────────── */
+.result-header.spam {
+  background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
+  border-bottom: 2px solid #FCA5A5;
+}
+
+.result-header.ham {
+  background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+  border-bottom: 2px solid #86EFAC;
 }
 
 /* ── Progress step list during OCR ──────────────────────── */
@@ -1622,10 +1667,10 @@ mark.spam-word {
   display: flex;
   align-items: center;
   gap: .5rem;
-  padding: .2rem 0;
+  padding: .25rem 0;
   color: var(--gray-500);
 }
 
-.ocr-pipeline-steps li.step-done   { color: var(--success); }
+.ocr-pipeline-steps li.step-done   { color: var(--success); font-weight: 500; }
 .ocr-pipeline-steps li.step-active { color: var(--navy); font-weight: 600; }
 .ocr-pipeline-steps li.step-error  { color: var(--danger); }
