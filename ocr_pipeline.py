@@ -58,7 +58,7 @@ try:
     import pytesseract
     _PYTESSERACT_AVAILABLE = True
 
-    # Windows: locate Tesseract binary automatically if not on PATH
+    # Locate Tesseract binary automatically if not already on PATH
     if platform.system() == "Windows":
         _WIN_PATHS = [
             r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -71,6 +71,18 @@ try:
             if os.path.exists(_p):
                 pytesseract.pytesseract.tesseract_cmd = _p
                 break
+    else:
+        _LINUX_PATHS = [
+            "/usr/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/render/project/src/bin/tesseract",
+        ]
+        for _p in _LINUX_PATHS:
+            if os.path.exists(_p):
+                pytesseract.pytesseract.tesseract_cmd = _p
+                break
+        if os.path.exists("/opt/render/project/src/tessdata"):
+            os.environ.setdefault("TESSDATA_PREFIX", "/opt/render/project/src/tessdata")
 
 except ImportError:
     pass

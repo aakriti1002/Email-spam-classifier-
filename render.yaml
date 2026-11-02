@@ -9,7 +9,7 @@ services:
     runtime: python
     region: singapore          # closest to India; change to oregon / frankfurt if preferred
     plan: free                 # change to starter ($7/mo) for persistent disk support
-    buildCommand: "apt-get install -y tesseract-ocr libgl1 && pip install -r requirements.txt && python nltk_setup.py"
+    buildCommand: "(command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y tesseract-ocr libgl1 || true) && pip install -r requirements.txt && python nltk_setup.py"
     startCommand: "gunicorn app:app --workers 2 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT"
     envVars:
       - key: PYTHON_VERSION
