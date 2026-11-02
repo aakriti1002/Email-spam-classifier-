@@ -219,12 +219,20 @@ async function analyzeEmail() {
       body: JSON.stringify({ email }),
     });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Prediction failed.");
+    // Safely parse JSON — server may return HTML on 500 errors
+    let data;
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      data = await res.json();
+    } else {
+      const text = await res.text();
+      throw new Error(`Server error (${res.status}): ${text.substring(0, 120)}`);
     }
 
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `Request failed with status ${res.status}`);
+    }
+
     state.lastResult = data;
     renderResult(data, email);
     await loadStats(); // refresh cards

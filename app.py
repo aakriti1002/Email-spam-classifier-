@@ -8,6 +8,7 @@ Provides REST APIs and serves HTML templates.
 import os
 import sys
 import json
+import math
 import sqlite3
 import joblib
 import threading
@@ -30,6 +31,27 @@ DB_PATH = os.path.join(BASE_DIR, "database.db")
 
 app = Flask(__name__)
 CORS(app)
+
+# ──────────────────────────────────────────────
+# Global JSON error handlers
+# Without these, Flask returns HTML error pages
+# which cause "Unexpected token '<'" in the browser.
+# ──────────────────────────────────────────────
+from werkzeug.exceptions import HTTPException
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(e):
+    """Return JSON for all HTTP errors (404, 405, etc.) instead of HTML."""
+    return jsonify({"error": e.description, "status": e.code}), e.code
+
+@app.errorhandler(500)
+def internal_error(e):
+    return jsonify({"error": "Internal server error.", "status": 500}), 500
+
+@app.errorhandler(Exception)
+def unhandled_exception(e):
+    app.logger.error("Unhandled exception: %s", str(e), exc_info=True)
+    return jsonify({"error": str(e), "status": 500}), 500
 
 # ──────────────────────────────────────────────
 # Lazy model loading (thread-safe singleton)
@@ -157,26 +179,28 @@ def predict():
     if len(email_text) < 3:
         return jsonify({"error": "Email is too short to analyse."}), 400
 
-    # ── NLP pipeline ──────────────────────────
-    cleaned = clean_text(email_text)
-    X = _vectorizer.transform([cleaned])
+    try:
+        # ── NLP pipeline ──────────────────────────
+        cleaned = clean_text(email_text)
+        X = _vectorizer.transform([cleaned])
 
-    # Prediction + probability
-    label_enc = _model.predict(X)[0]
+        # Prediction + confidence
+        label_enc = _model.predict(X)[0]
 
-    if hasattr(_model, "predict_proba"):
-        proba = _model.predict_proba(X)[0]
-        confidence = round(float(proba[label_enc]) * 100, 2)
-    elif hasattr(_model, "decision_function"):
-        decision = _model.decision_function(X)[0]
-        # Sigmoid approximation
-        import math
-        sig = 1 / (1 + math.exp(-abs(decision)))
-        confidence = round(sig * 100, 2)
-    else:
-        confidence = 100.0
+        if hasattr(_model, "predict_proba"):
+            proba = _model.predict_proba(X)[0]
+            confidence = round(float(proba[label_enc]) * 100, 2)
+        elif hasattr(_model, "decision_function"):
+            decision = _model.decision_function(X)[0]
+            sig = 1 / (1 + math.exp(-abs(decision)))
+            confidence = round(sig * 100, 2)
+        else:
+            confidence = 100.0
 
-    prediction = "Spam" if label_enc == 1 else "Ham"
+        prediction = "Spam" if label_enc == 1 else "Ham"
+    except Exception as exc:
+        app.logger.error("Prediction pipeline error: %s", exc, exc_info=True)
+        return jsonify({"error": f"Prediction failed: {str(exc)}"}), 500
 
     # ── Feature analysis ──────────────────────
     url_data = extract_urls(email_text)
