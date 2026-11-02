@@ -29,6 +29,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindHistoryControls();
   await loadStats();          // dashboard cards
   showSection("analyze");
+  // Initialise image analysis (loaded via image_analysis.js)
+  if (typeof initImageAnalysis === "function") initImageAnalysis();
 });
 
 /* ══════════════════════════════════════════════════════════════

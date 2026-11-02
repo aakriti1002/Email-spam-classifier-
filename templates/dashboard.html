@@ -68,6 +68,11 @@
         Analyse Email
       </button>
 
+      <button class="sidebar-item" data-section="image-analyze" id="nav-image-analyze">
+        <i class="bi bi-image"></i>
+        Image Analysis
+      </button>
+
       <button class="sidebar-item" data-section="history" id="nav-history">
         <i class="bi bi-clock-history"></i>
         Prediction History
@@ -566,6 +571,129 @@
           </div>
         </div>
       </div>
+      <!-- ══════════════════════════════════════
+           SECTION: IMAGE ANALYSIS (NEW)
+      ══════════════════════════════════════ -->
+      <div class="dash-section hidden" id="section-image-analyze">
+        <div class="page-title"><i class="bi bi-image me-2 text-navy"></i>Image-Based Email Analysis</div>
+        <div class="page-subtitle">
+          Upload a screenshot of an email to extract text via OCR and classify it using the trained spam detection model.
+        </div>
+
+        <!-- OCR status badge -->
+        <div class="mb-3" id="ocrStatusBanner">
+          <span class="ocr-status-badge ocr-warning">
+            <i class="bi bi-hourglass-split"></i> Checking OCR status…
+          </span>
+        </div>
+
+        <div class="row g-3">
+          <!-- ── Left: Upload column ── -->
+          <div class="col-lg-5">
+            <div class="card h-100">
+              <div class="card-header-bar">
+                <span><i class="bi bi-cloud-upload me-2"></i>Image Upload</span>
+                <span class="text-muted-sm">JPG, PNG, WEBP · Max 5 MB</span>
+              </div>
+              <div class="card-body-pad d-flex flex-column gap-3">
+
+                <!-- Drop zone -->
+                <div class="img-upload-zone" id="imgDropZone">
+                  <!-- Placeholder (shown when no image) -->
+                  <div id="imgDropPlaceholder">
+                    <i class="bi bi-image upload-icon"></i>
+                    <div class="upload-title">Drop email screenshot here</div>
+                    <div class="upload-sub">or click to browse • JPG / PNG / WEBP</div>
+                    <div class="upload-sub mt-1" style="font-size:.72rem">Maximum file size: 5 MB</div>
+                  </div>
+
+                  <!-- Image preview (hidden until file selected) -->
+                  <div id="imgPreviewWrap" class="d-none">
+                    <img id="imgPreview" src="" alt="Email screenshot preview" style="display:none">
+                    <button class="img-remove-btn" id="imgRemoveBtn" title="Remove image" type="button">
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
+
+                  <input type="file" id="imgFileInput" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="d-none">
+                </div>
+
+                <!-- Analyse button -->
+                <button class="btn-primary-navy justify-content-center" id="imgAnalyzeBtn">
+                  <i class="bi bi-search"></i>
+                  Extract Text &amp; Analyse
+                </button>
+
+                <!-- Tips -->
+                <div class="card" style="background:var(--gray-50);border:1px solid var(--gray-200)">
+                  <div class="card-body-pad">
+                    <div class="fw-600 mb-2" style="font-size:.82rem">
+                      <i class="bi bi-lightbulb text-navy me-1"></i>Tips for best OCR results
+                    </div>
+                    <ul style="font-size:.76rem;color:var(--gray-700);line-height:1.9;padding-left:1.1rem;margin:0">
+                      <li>Use a full-resolution screenshot (not a thumbnail)</li>
+                      <li>Ensure text is readable and not blurry</li>
+                      <li>Avoid screenshots with heavy image backgrounds</li>
+                      <li>PNG format gives better OCR results than WEBP</li>
+                      <li>After OCR, correct any mistakes in the text editor</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Right: Results column ── -->
+          <div class="col-lg-7">
+
+            <!-- Placeholder before analysis -->
+            <div id="imgResultPlaceholder" class="card h-100 d-flex align-items-center justify-content-center"
+                 style="min-height:360px">
+              <div class="text-center p-4">
+                <i class="bi bi-image text-navy" style="font-size:3.5rem;opacity:.2"></i>
+                <div class="fw-600 mt-3" style="color:var(--gray-400);font-size:.9rem">
+                  Awaiting Image Upload
+                </div>
+                <div class="text-muted-sm mt-1">
+                  Upload an email screenshot and click <strong>Extract Text &amp; Analyse</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- OCR result section (hidden until analysis) -->
+            <div id="ocrResultSection" class="d-none"></div>
+
+            <!-- ML classification result (hidden until analysis) -->
+            <div id="imgMlResultSection" class="d-none mt-3"></div>
+
+          </div>
+        </div>
+
+        <!-- Pipeline explanation -->
+        <div class="card mt-3" style="background:var(--gray-50)">
+          <div class="card-body-pad">
+            <div class="fw-600 mb-2" style="font-size:.85rem">
+              <i class="bi bi-diagram-3 text-navy me-1"></i>Image Analysis Pipeline
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center" style="font-size:.75rem;color:var(--gray-600)">
+              <span class="arch-step" style="padding:.3rem .6rem">📷 Upload Image</span>
+              <i class="bi bi-arrow-right text-navy"></i>
+              <span class="arch-step" style="padding:.3rem .6rem">🔍 OCR (Tesseract)</span>
+              <i class="bi bi-arrow-right text-navy"></i>
+              <span class="arch-step" style="padding:.3rem .6rem">📝 Extract Text</span>
+              <i class="bi bi-arrow-right text-navy"></i>
+              <span class="arch-step" style="padding:.3rem .6rem">🧹 NLP Preprocessing</span>
+              <i class="bi bi-arrow-right text-navy"></i>
+              <span class="arch-step" style="padding:.3rem .6rem">📊 TF-IDF Vectors</span>
+              <i class="bi bi-arrow-right text-navy"></i>
+              <span class="arch-step" style="padding:.3rem .6rem">🤖 LinearSVC Model</span>
+              <i class="bi bi-arrow-right text-navy"></i>
+              <span class="arch-step" style="padding:.3rem .6rem">🛡️ Spam / Ham + Risk Score</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- End sections -->
 
     </div><!-- /page-content -->
@@ -576,6 +704,8 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <!-- Dashboard JS -->
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<!-- Image Analysis JS -->
+<script src="{{ url_for('static', filename='js/image_analysis.js') }}"></script>
 
 <!-- Quick sample buttons -->
 <script>

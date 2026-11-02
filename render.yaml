@@ -9,7 +9,7 @@ services:
     runtime: python
     region: singapore          # closest to India; change to oregon / frankfurt if preferred
     plan: free                 # change to starter ($7/mo) for persistent disk support
-    buildCommand: "pip install -r requirements.txt && python nltk_setup.py"
+    buildCommand: "apt-get install -y tesseract-ocr libgl1 && pip install -r requirements.txt && python nltk_setup.py"
     startCommand: "gunicorn app:app --workers 2 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT"
     envVars:
       - key: PYTHON_VERSION
@@ -34,4 +34,11 @@ services:
 # Then change DB_PATH in app.py to:
 #   DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "database.db"))
 # and set DB_PATH=/data/database.db in Render environment variables.
+# ────────────────────────────────────────────────────────────────────────────
+
+# ── Tesseract OCR note ──────────────────────────────────────────────────────
+# tesseract-ocr: the Tesseract OCR engine binary (system dependency).
+# libgl1: required by opencv-python-headless on Linux.
+# Both are installed via apt-get in the buildCommand above.
+# pytesseract (the Python wrapper) is installed via requirements.txt.
 # ────────────────────────────────────────────────────────────────────────────

@@ -17,6 +17,11 @@ _NLTK_HOME = os.path.expanduser("~/nltk_data")
 if _NLTK_HOME not in nltk.data.path:
     nltk.data.path.insert(0, _NLTK_HOME)
 
+# Also check for bundled nltk_data in the project directory
+_LOCAL_NLTK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nltk_data")
+if os.path.exists(_LOCAL_NLTK) and _LOCAL_NLTK not in nltk.data.path:
+    nltk.data.path.append(_LOCAL_NLTK)
+
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer, WordNetLemmatizer
 from nltk.tokenize import word_tokenize

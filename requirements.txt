@@ -8,3 +8,16 @@ joblib>=1.4.0
 Werkzeug>=3.0.0
 requests>=2.31.0
 gunicorn>=21.2.0
+
+# ── Image-based spam detection (OCR) ──────────────────────
+# pytesseract: Python wrapper for Tesseract OCR engine
+# IMPORTANT: The Tesseract binary must also be installed separately.
+#   Windows: https://github.com/UB-Mannheim/tesseract/wiki
+#   Linux/Render: apt-get install -y tesseract-ocr  (see render.yaml)
+pytesseract>=0.3.10
+
+# opencv-python-headless: image preprocessing (no GUI deps, safe for servers)
+opencv-python-headless>=4.9.0.80
+
+# Pillow: image loading, EXIF correction, format validation
+Pillow>=10.3.0

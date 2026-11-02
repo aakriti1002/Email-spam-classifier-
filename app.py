@@ -21,6 +21,11 @@ from preprocess import (
     extract_spam_reasons, get_highlight_words, compute_risk_score,
     ensure_nltk_data,
 )
+from ocr_pipeline import (
+    validate_image_upload, extract_text_from_image,
+    extract_email_fields, check_ocr_availability,
+    ALLOWED_EXTENSIONS, MAX_FILE_BYTES,
+)
 
 # ──────────────────────────────────────────────
 # Application Setup
@@ -103,19 +108,28 @@ def close_db(error=None):
 
 
 def init_db():
-    """Initialise the database schema."""
+    """Initialise the database schema and apply backward-compatible migrations."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS prediction_history (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                email_text  TEXT    NOT NULL,
-                prediction  TEXT    NOT NULL,
-                confidence  REAL    NOT NULL,
-                risk_score  INTEGER NOT NULL,
-                reasons     TEXT,
-                timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_text    TEXT    NOT NULL,
+                prediction    TEXT    NOT NULL,
+                confidence    REAL    NOT NULL,
+                risk_score    INTEGER NOT NULL,
+                reasons       TEXT,
+                analysis_type TEXT    DEFAULT 'text',
+                timestamp     DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Backward-compatible migration: add analysis_type if it doesn't exist yet
+        existing_cols = [
+            row[1] for row in conn.execute("PRAGMA table_info(prediction_history)").fetchall()
+        ]
+        if "analysis_type" not in existing_cols:
+            conn.execute(
+                "ALTER TABLE prediction_history ADD COLUMN analysis_type TEXT DEFAULT 'text'"
+            )
         conn.commit()
 
 
@@ -213,14 +227,15 @@ def predict():
     db = get_db()
     db.execute(
         """INSERT INTO prediction_history
-           (email_text, prediction, confidence, risk_score, reasons)
-           VALUES (?, ?, ?, ?, ?)""",
+           (email_text, prediction, confidence, risk_score, reasons, analysis_type)
+           VALUES (?, ?, ?, ?, ?, ?)""",
         (
             email_text[:2000],      # cap stored text
             prediction,
             confidence,
             risk_info["score"],
             json.dumps(reasons),
+            "text",
         ),
     )
     db.commit()
@@ -386,6 +401,198 @@ def upload_file():
         return jsonify({"error": "Only .txt files are accepted."}), 400
     content = f.read().decode("utf-8", errors="ignore")
     return jsonify({"content": content})
+
+
+# ──────────────────────────────────────────────
+# Shared ML inference helper (text → analysis)
+# Used by both /api/predict and image endpoints.
+# ──────────────────────────────────────────────
+def _run_ml_pipeline(email_text: str, analysis_type: str = "text") -> tuple[dict, int]:
+    """
+    Run the full ML + feature analysis pipeline on a text string.
+    Returns (result_dict, http_status_code).
+
+    This is the single canonical inference path.  Both the text-analysis
+    endpoint and the image-analysis endpoint call this function so results
+    are always consistent.
+    """
+    if not load_model():
+        return {"error": "Model not trained yet. Please run train_model.py first."}, 503
+
+    email_text = email_text.strip()
+    if not email_text:
+        return {"error": "Email content is required."}, 400
+    if len(email_text) < 3:
+        return {"error": "Email text is too short to analyse."}, 400
+
+    try:
+        cleaned = clean_text(email_text)
+        X = _vectorizer.transform([cleaned])
+        label_enc = _model.predict(X)[0]
+
+        if hasattr(_model, "predict_proba"):
+            proba = _model.predict_proba(X)[0]
+            confidence = round(float(proba[label_enc]) * 100, 2)
+        elif hasattr(_model, "decision_function"):
+            decision = _model.decision_function(X)[0]
+            sig = 1 / (1 + math.exp(-abs(decision)))
+            confidence = round(sig * 100, 2)
+        else:
+            confidence = 100.0
+
+        prediction = "Spam" if label_enc == 1 else "Ham"
+    except Exception as exc:
+        app.logger.error("Prediction pipeline error: %s", exc, exc_info=True)
+        return {"error": f"Prediction failed: {str(exc)}"}, 500
+
+    url_data = extract_urls(email_text)
+    phish_data = detect_phishing(email_text)
+    reasons = extract_spam_reasons(email_text, prediction, confidence)
+    highlight_words = get_highlight_words(email_text, prediction)
+    risk_info = compute_risk_score(prediction, confidence, url_data, phish_data)
+
+    # Persist
+    db = get_db()
+    db.execute(
+        """INSERT INTO prediction_history
+           (email_text, prediction, confidence, risk_score, reasons, analysis_type)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (
+            email_text[:2000],
+            prediction,
+            confidence,
+            risk_info["score"],
+            json.dumps(reasons),
+            analysis_type,
+        ),
+    )
+    db.commit()
+
+    return {
+        "prediction": prediction,
+        "confidence": confidence,
+        "confidenceNote": (
+            "Derived from LinearSVC decision function via sigmoid — "
+            "an estimate, not a calibrated probability."
+        ),
+        "riskScore": risk_info["score"],
+        "riskStatus": risk_info["status"],
+        "riskColor": risk_info["color"],
+        "reasons": reasons,
+        "highlightedWords": highlight_words,
+        "urlAnalysis": {
+            "count": url_data["count"],
+            "suspicious": len(url_data["suspicious"]),
+            "shortened": len(url_data["shortened"]),
+            "hasSuspicious": url_data["has_suspicious"],
+            "urls": url_data["urls"][:10],
+        },
+        "phishingDetected": phish_data["is_phishing"],
+        "phishingPatterns": phish_data["patterns"],
+        "preprocessedText": cleaned,
+        "analysisType": analysis_type,
+    }, 200
+
+
+# ──────────────────────────────────────────────
+# API: Analyse Image (OCR → ML pipeline)
+# ──────────────────────────────────────────────
+@app.route("/api/analyze-image", methods=["POST"])
+def analyze_image():
+    """
+    POST /api/analyze-image
+    Input : multipart/form-data, field 'image'
+    Output: OCR result + full spam classification result.
+    """
+    if "image" not in request.files:
+        return jsonify({"error": "No image file provided. Use field name 'image'."}), 400
+
+    f = request.files["image"]
+    if not f or not f.filename:
+        return jsonify({"error": "No image file selected."}), 400
+
+    # Validation
+    ok, err_msg = validate_image_upload(f)
+    if not ok:
+        return jsonify({"error": err_msg}), 400
+
+    # Read bytes (already validated)
+    f.seek(0)
+    raw_bytes = f.read()
+
+    # OCR extraction
+    ocr_result = extract_text_from_image(raw_bytes)
+    if not ocr_result["success"]:
+        return jsonify({
+            "error": ocr_result["error"],
+            "ocrFailed": True,
+        }), 422   # Unprocessable Entity
+
+    extracted_text = ocr_result["cleaned_text"]
+    email_fields = extract_email_fields(extracted_text)
+
+    # Run ML pipeline on extracted text
+    ml_result, status = _run_ml_pipeline(extracted_text, analysis_type="image")
+    if status != 200:
+        # ML failed but OCR succeeded — return OCR data with the ML error
+        return jsonify({
+            **ml_result,
+            "ocrText": extracted_text,
+            "ocrRawText": ocr_result["raw_text"],
+            "ocrConfidence": ocr_result["ocr_confidence"],
+            "ocrConfidenceAvailable": ocr_result["confidence_available"],
+            "wordCount": ocr_result["word_count"],
+            "emailFields": email_fields,
+        }), status
+
+    # Merge OCR metadata into ML result
+    ml_result.update({
+        "ocrText": extracted_text,
+        "ocrRawText": ocr_result["raw_text"],
+        "ocrConfidence": ocr_result["ocr_confidence"],
+        "ocrConfidenceAvailable": ocr_result["confidence_available"],
+        "wordCount": ocr_result["word_count"],
+        "charCount": ocr_result["char_count"],
+        "emailFields": email_fields,
+        "analysisType": "image",
+    })
+
+    return jsonify(ml_result), 200
+
+
+# ──────────────────────────────────────────────
+# API: Analyse Extracted / Edited Text
+# ──────────────────────────────────────────────
+@app.route("/api/analyze-extracted-text", methods=["POST"])
+def analyze_extracted_text():
+    """
+    POST /api/analyze-extracted-text
+    Body: { "text": "<email text>", "source": "ocr" | "edited" }
+    Runs extracted/corrected OCR text through the existing ML pipeline.
+    """
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "").strip()
+    source = data.get("source", "edited")
+
+    if not text:
+        return jsonify({"error": "Text content is required."}), 400
+
+    if source not in ("ocr", "edited"):
+        source = "edited"
+
+    analysis_type = f"image_{source}"
+    result, status = _run_ml_pipeline(text, analysis_type=analysis_type)
+    return jsonify(result), status
+
+
+# ──────────────────────────────────────────────
+# API: OCR Status
+# ──────────────────────────────────────────────
+@app.route("/api/ocr-status", methods=["GET"])
+def ocr_status():
+    """GET /api/ocr-status — reports whether OCR components are available."""
+    avail = check_ocr_availability()
+    return jsonify(avail), 200 if avail["ready"] else 503
 
 
 # ──────────────────────────────────────────────
