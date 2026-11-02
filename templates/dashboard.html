@@ -577,9 +577,9 @@
       <div class="dash-section hidden" id="section-image-analyze">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
           <div>
-            <div class="page-title mb-1"><i class="bi bi-image me-2 text-navy"></i>Image-Based Email Analysis</div>
+            <div class="page-title mb-1"><i class="bi bi-shield-check me-2 text-navy"></i>Image-Based Email Security Analysis</div>
             <div class="page-subtitle mb-0">
-              Upload a screenshot of an email to extract text via OCR and classify it using the trained LinearSVC model.
+              Scan email screenshots for spam, phishing indicators, and URL threats via OCR and LinearSVC machine learning.
             </div>
           </div>
           <!-- OCR Status badge -->
@@ -594,99 +594,112 @@
         <div class="img-pipeline-strip mb-3">
           <div class="pipeline-flow-pill"><i class="bi bi-image text-navy"></i> <span>1. Upload</span></div>
           <i class="bi bi-chevron-right text-muted-sm"></i>
-          <div class="pipeline-flow-pill"><i class="bi bi-search text-navy"></i> <span>2. OCR Preprocessing</span></div>
+          <div class="pipeline-flow-pill"><i class="bi bi-search text-navy"></i> <span>2. OCR Extraction</span></div>
           <i class="bi bi-chevron-right text-muted-sm"></i>
-          <div class="pipeline-flow-pill"><i class="bi bi-file-text text-navy"></i> <span>3. Extract Text</span></div>
+          <div class="pipeline-flow-pill"><i class="bi bi-filter text-navy"></i> <span>3. NLP &amp; TF-IDF</span></div>
           <i class="bi bi-chevron-right text-muted-sm"></i>
-          <div class="pipeline-flow-pill"><i class="bi bi-filter text-navy"></i> <span>4. NLP &amp; TF-IDF</span></div>
+          <div class="pipeline-flow-pill"><i class="bi bi-cpu text-navy"></i> <span>4. LinearSVC</span></div>
           <i class="bi bi-chevron-right text-muted-sm"></i>
-          <div class="pipeline-flow-pill"><i class="bi bi-cpu text-navy"></i> <span>5. LinearSVC</span></div>
-          <i class="bi bi-chevron-right text-muted-sm"></i>
-          <div class="pipeline-flow-pill"><i class="bi bi-shield-check text-navy"></i> <span>6. XAI &amp; Risk</span></div>
+          <div class="pipeline-flow-pill"><i class="bi bi-shield-check text-navy"></i> <span>5. Risk &amp; XAI</span></div>
         </div>
 
         <div class="row g-3 align-items-start">
-          <!-- ── LEFT COLUMN: Image Input & OCR Extracted Text Editor (~42%) ── -->
+          <!-- ── LEFT COLUMN: Email Input Workspace (~40%) ── -->
           <div class="col-lg-5 col-xl-5">
-            <div class="d-flex flex-column gap-3">
+            <div class="card email-input-workspace-card">
+              <div class="card-header-bar d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-shield-lock me-2 text-navy"></i>Email Input Workspace</span>
+                <span class="text-muted-sm" style="font-size:.74rem">JPG · PNG · WEBP (≤ 5MB)</span>
+              </div>
+              <div class="card-body-pad d-flex flex-column gap-3">
 
-              <!-- Card 1: Image Upload & Preview -->
-              <div class="card">
-                <div class="card-header-bar">
-                  <span><i class="bi bi-cloud-arrow-up me-2 text-navy"></i>Email Screenshot</span>
-                  <span class="text-muted-sm">JPG, PNG, WEBP · ≤ 5 MB</span>
-                </div>
-                <div class="card-body-pad d-flex flex-column gap-3">
+                <!-- 1. Drop Zone / Image Selector -->
+                <div class="img-upload-zone" id="imgDropZone">
+                  <!-- Empty state placeholder -->
+                  <div id="imgDropPlaceholder">
+                    <i class="bi bi-cloud-arrow-up upload-icon"></i>
+                    <div class="upload-title">Drop screenshot here or click to browse</div>
+                    <div class="upload-sub">Supports JPG, PNG, WEBP (Max 5 MB)</div>
+                  </div>
 
-                  <!-- Drop zone -->
-                  <div class="img-upload-zone" id="imgDropZone">
-                    <!-- Placeholder (shown when no image selected) -->
-                    <div id="imgDropPlaceholder">
-                      <i class="bi bi-image upload-icon"></i>
-                      <div class="upload-title">Drop screenshot here or click to browse</div>
-                      <div class="upload-sub">Supports JPG, PNG, WEBP up to 5 MB</div>
-                    </div>
-
-                    <!-- Image preview (hidden until file selected) -->
-                    <div id="imgPreviewWrap" class="d-none">
-                      <img id="imgPreview" src="" alt="Email screenshot preview" style="display:none">
-                      <button class="img-remove-btn" id="imgRemoveBtn" title="Remove image" type="button">
-                        <i class="bi bi-x"></i>
+                  <!-- Loaded preview -->
+                  <div id="imgPreviewWrap" class="d-none">
+                    <img id="imgPreview" src="" alt="Email screenshot preview" style="display:none">
+                    <div class="img-preview-actions mt-2 d-flex justify-content-center gap-2">
+                      <button class="btn btn-sm btn-outline-secondary py-1 px-2" id="imgReplaceBtn" type="button" style="font-size:.74rem">
+                        <i class="bi bi-arrow-repeat me-1"></i>Change Image
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger py-1 px-2" id="imgRemoveBtn" type="button" style="font-size:.74rem">
+                        <i class="bi bi-trash3 me-1"></i>Remove
                       </button>
                     </div>
-
-                    <input type="file" id="imgFileInput" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="d-none">
                   </div>
 
-                  <!-- Action button row -->
-                  <div class="d-flex gap-2">
-                    <button class="btn-primary-navy flex-grow-1 justify-content-center" id="imgAnalyzeBtn">
-                      <i class="bi bi-search"></i>
-                      Extract Text &amp; Analyse
-                    </button>
-                    <button class="btn-outline-navy" id="imgClearBtn" title="Clear image">
-                      <i class="bi bi-arrow-counterclockwise"></i>
-                    </button>
-                  </div>
-
-                  <!-- Quick guidelines hint -->
-                  <div class="text-muted-sm d-flex align-items-center gap-1" style="font-size:.74rem">
-                    <i class="bi bi-info-circle text-navy flex-shrink-0"></i>
-                    <span>Use high-contrast screenshots with visible headers for optimal text recognition.</span>
-                  </div>
-
+                  <input type="file" id="imgFileInput" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="d-none">
                 </div>
+
+                <!-- Primary Action Button -->
+                <button class="btn-primary-navy justify-content-center py-2" id="imgAnalyzeBtn" disabled>
+                  <i class="bi bi-shield-check"></i>
+                  Extract Text &amp; Analyse
+                </button>
+
+                <!-- 2. OCR Extracted Text & Editor Section (Inside Left Column) -->
+                <div id="ocrWorkspaceContainer">
+                  <!-- Before analysis: clean helper placeholder -->
+                  <div id="ocrEmptyPrompt" class="text-center py-3 px-2 border rounded bg-light">
+                    <i class="bi bi-file-earmark-text text-navy opacity-50 fs-4 d-block mb-1"></i>
+                    <div class="fw-600 text-muted-sm" style="font-size:.78rem">Extracted Text Workspace</div>
+                    <div class="text-muted-sm" style="font-size:.72rem">
+                      OCR text will appear here automatically for inspection and editing.
+                    </div>
+                  </div>
+
+                  <!-- After analysis: active editor -->
+                  <div id="ocrActiveEditor" class="d-none d-flex flex-column gap-2"></div>
+                </div>
+
+                <!-- 3. Collapsible OCR Tips -->
+                <details class="ocr-tips-box">
+                  <summary class="cursor-pointer text-muted-sm fw-600 d-flex align-items-center gap-1" style="font-size:.75rem">
+                    <i class="bi bi-lightbulb text-navy"></i>
+                    <span>OCR Tips for Best Accuracy</span>
+                    <i class="bi bi-chevron-down ms-auto" style="font-size:.65rem"></i>
+                  </summary>
+                  <div class="ocr-tips-content mt-2 text-muted-sm" style="font-size:.73rem;line-height:1.6">
+                    <div>• Use full-resolution screenshots with uncropped headers.</div>
+                    <div>• Ensure high contrast between text and background.</div>
+                    <div>• After extraction, correct any typos using the editor above.</div>
+                  </div>
+                </details>
+
               </div>
-
-              <!-- Card 2: OCR Extracted Text & Editor (Appears in Left Column after extraction) -->
-              <div id="ocrResultSection" class="d-none"></div>
-
             </div>
           </div>
 
-          <!-- ── RIGHT COLUMN: Prediction & Security Results (~58%) ── -->
+          <!-- ── RIGHT COLUMN: Detection Workspace (~60%) ── -->
           <div class="col-lg-7 col-xl-7">
 
-            <!-- Placeholder before analysis -->
-            <div id="imgResultPlaceholder" class="card d-flex align-items-center justify-content-center"
-                 style="min-height:440px">
+            <!-- Empty State Placeholder -->
+            <div id="imgResultPlaceholder" class="card d-flex align-items-center justify-content-center" style="min-height:460px">
               <div class="text-center p-4">
-                <i class="bi bi-shield-shaded text-navy" style="font-size:3.5rem;opacity:.2"></i>
-                <div class="fw-600 mt-3" style="color:var(--gray-500);font-size:.95rem">
-                  Awaiting Image Analysis
+                <i class="bi bi-shield-check text-navy" style="font-size:3.2rem;opacity:.25"></i>
+                <div class="fw-700 mt-3" style="color:var(--navy-dark);font-size:.95rem">
+                  Detection Workspace Ready
                 </div>
-                <div class="text-muted-sm mt-1" style="max-width:320px;margin:0 auto">
-                  Upload an email screenshot on the left and click <strong>Extract Text &amp; Analyse</strong> to run OCR and machine learning classification.
+                <div class="text-muted-sm mt-1" style="max-width:340px;margin:0 auto;font-size:.8rem;line-height:1.6">
+                  Select an email screenshot on the left and click <strong>Extract Text &amp; Analyse</strong> to run OCR extraction, LinearSVC classification, and heuristic threat analysis.
                 </div>
-                <div class="d-flex justify-content-center gap-3 mt-3 text-muted-sm" style="font-size:.76rem">
-                  <span><i class="bi bi-check2 text-success me-1"></i>LinearSVC ML Model</span>
-                  <span><i class="bi bi-check2 text-success me-1"></i>0–100 Risk Score</span>
-                  <span><i class="bi bi-check2 text-success me-1"></i>Explainable AI</span>
+                <div class="d-flex flex-wrap justify-content-center gap-3 mt-3 text-muted-sm" style="font-size:.75rem">
+                  <span><i class="bi bi-check2 text-success me-1"></i>LinearSVC Classification</span>
+                  <span><i class="bi bi-check2 text-success me-1"></i>0–100 Risk Meter</span>
+                  <span><i class="bi bi-check2 text-success me-1"></i>Phishing &amp; Link Heuristics</span>
+                  <span><i class="bi bi-check2 text-success me-1"></i>Explainable AI Factors</span>
                 </div>
               </div>
             </div>
 
-            <!-- ML classification result (populated by JS immediately at top of right column) -->
+            <!-- Active Result Workspace -->
             <div id="imgMlResultSection" class="d-none"></div>
 
           </div>

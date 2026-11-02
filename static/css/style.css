@@ -1674,3 +1674,127 @@ mark.spam-word {
 .ocr-pipeline-steps li.step-done   { color: var(--success); font-weight: 500; }
 .ocr-pipeline-steps li.step-active { color: var(--navy); font-weight: 600; }
 .ocr-pipeline-steps li.step-error  { color: var(--danger); }
+
+/* ── SaaS Dashboard UI Enhancements for Image Analysis ──── */
+.email-input-workspace-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  background: var(--white);
+  transition: box-shadow var(--transition);
+}
+
+.status-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.status-icon-box.spam {
+  background: #FEE2E2;
+  color: var(--danger);
+}
+
+.status-icon-box.ham {
+  background: #DCFCE7;
+  color: var(--success);
+}
+
+/* Security Flag Alert Cards & Chips */
+.security-flag-card {
+  border-radius: var(--radius);
+  padding: .65rem .85rem;
+}
+
+.security-flag-card.danger {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+}
+
+.security-flag-card.warning {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+}
+
+.security-flag-card.success {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+}
+
+.security-flag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .76rem;
+  font-weight: 600;
+  padding: .35rem .65rem;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.security-flag-chip.danger {
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 1px solid #FCA5A5;
+}
+
+.security-flag-chip.warning {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FCD34D;
+}
+
+/* Extracted Content Accordion */
+.extracted-content-accordion {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--white);
+  overflow: hidden;
+}
+
+.extracted-content-accordion summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+}
+
+.extracted-content-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.extracted-content-accordion summary:hover {
+  background: var(--gray-100);
+}
+
+.extracted-content-accordion[open] summary {
+  border-bottom: 1px solid var(--gray-200);
+}
+
+/* OCR Tips Collapsible Details Box */
+.ocr-tips-box {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  padding: .45rem .65rem;
+}
+
+.ocr-tips-box summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ocr-tips-box summary::-webkit-details-marker {
+  display: none;
+}
+
+.ocr-tips-content {
+  border-top: 1px dashed var(--gray-200);
+  padding-top: .4rem;
+}
+

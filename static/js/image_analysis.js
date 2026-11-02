@@ -1,16 +1,11 @@
 /**
  * image_analysis.js
  * -----------------
- * Handles the Image-Based Email Spam Analysis feature:
- *  - Image drag-and-drop upload zone
- *  - Image preview with remove button
- *  - POST /api/analyze-image
- *  - Left column: OCR-extracted text editor + metadata
- *  - Right column: Compact, organized ML prediction and security result panel
- *  - POST /api/analyze-extracted-text (re-analyse edited OCR)
- *
- * NOTE: Depends on dashboard.js being loaded first for helper utilities:
- *   escHtml(), highlightWords(), buildUrlSection(), showToast(), state.
+ * Polished Cybersecurity Dashboard for Image-Based Email Spam Detection:
+ *  - Left column: Unified Email Input Workspace (upload, preview, OCR status, editable text, word/URL counts, tips)
+ *  - Right column: Detection Workspace (Prediction summary, Security indicators, Explainability, Collapsible content, New Analysis)
+ *  - Re-analysis & reset workflow
+ *  - Keyboard accessibility & responsive layout
  */
 
 let _selectedImageFile = null;
@@ -18,17 +13,16 @@ let _originalOcrText = "";
 let _lastImageAnalysisData = null;
 
 /* ══════════════════════════════════════════════════════════════
-   IMAGE SECTION INIT
+   INIT
 ══════════════════════════════════════════════════════════════ */
 function initImageAnalysis() {
   initImgDropZone();
   bindImgAnalyzeBtn();
-  bindImgClearBtn();
   checkOcrStatus();
 }
 
 /* ══════════════════════════════════════════════════════════════
-   OCR AVAILABILITY CHECK
+   OCR STATUS
 ══════════════════════════════════════════════════════════════ */
 async function checkOcrStatus() {
   const banner = document.getElementById("ocrStatusBanner");
@@ -39,7 +33,7 @@ async function checkOcrStatus() {
     if (data.ready) {
       banner.innerHTML = `
         <span class="ocr-status-badge ocr-success">
-          <i class="bi bi-check-circle-fill"></i>
+          <i class="bi bi-shield-check"></i>
           OCR Engine Active ${data.tesseract_version ? "· v" + data.tesseract_version : ""}
         </span>`;
     } else {
@@ -57,25 +51,36 @@ async function checkOcrStatus() {
     banner.innerHTML = `
       <span class="ocr-status-badge ocr-warning">
         <i class="bi bi-question-circle"></i>
-        OCR Status: Standalone
+        OCR Engine Standby
       </span>`;
   }
 }
 
 /* ══════════════════════════════════════════════════════════════
-   IMAGE DROP ZONE & PREVIEW
+   DROP ZONE & PREVIEW
 ══════════════════════════════════════════════════════════════ */
 function initImgDropZone() {
-  const zone      = document.getElementById("imgDropZone");
-  const input     = document.getElementById("imgFileInput");
-  const removeBtn = document.getElementById("imgRemoveBtn");
+  const zone       = document.getElementById("imgDropZone");
+  const input      = document.getElementById("imgFileInput");
+  const replaceBtn = document.getElementById("imgReplaceBtn");
+  const removeBtn  = document.getElementById("imgRemoveBtn");
 
   if (!zone || !input) return;
 
-  // Click to browse
+  // Click zone to browse (unless clicked on button)
   zone.addEventListener("click", (e) => {
-    if (e.target === removeBtn || removeBtn?.contains(e.target)) return;
+    if (e.target.closest("#imgReplaceBtn") || e.target.closest("#imgRemoveBtn")) return;
+    if (!_selectedImageFile) input.click();
+  });
+
+  replaceBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
     input.click();
+  });
+
+  removeBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    _clearImageWorkspace();
   });
 
   // Drag-and-drop
@@ -91,15 +96,8 @@ function initImgDropZone() {
     if (file) _loadImageFile(file);
   });
 
-  // File input change
   input.addEventListener("change", () => {
     if (input.files[0]) _loadImageFile(input.files[0]);
-  });
-
-  // Remove image
-  removeBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    _clearImage();
   });
 }
 
@@ -120,6 +118,7 @@ function _loadImageFile(file) {
   const preview     = document.getElementById("imgPreview");
   const previewW    = document.getElementById("imgPreviewWrap");
   const placeholder = document.getElementById("imgDropPlaceholder");
+  const analyzeBtn  = document.getElementById("imgAnalyzeBtn");
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -130,14 +129,15 @@ function _loadImageFile(file) {
     previewW?.classList.remove("d-none");
     placeholder?.classList.add("d-none");
     zone?.classList.add("has-image");
+    if (analyzeBtn) analyzeBtn.disabled = false;
   };
   reader.readAsDataURL(file);
 
   // Clear previous results when new image loaded
-  _clearImageResults();
+  _clearResultsOnly();
 }
 
-function _clearImage() {
+function _clearImageWorkspace() {
   _selectedImageFile = null;
   _originalOcrText = "";
   _lastImageAnalysisData = null;
@@ -147,6 +147,7 @@ function _clearImage() {
   const previewW    = document.getElementById("imgPreviewWrap");
   const placeholder = document.getElementById("imgDropPlaceholder");
   const input       = document.getElementById("imgFileInput");
+  const analyzeBtn  = document.getElementById("imgAnalyzeBtn");
 
   if (preview) {
     preview.src = "";
@@ -156,18 +157,23 @@ function _clearImage() {
   placeholder?.classList.remove("d-none");
   zone?.classList.remove("has-image");
   if (input) input.value = "";
+  if (analyzeBtn) analyzeBtn.disabled = true;
 
-  _clearImageResults();
+  _clearResultsOnly();
 }
 
-function _clearImageResults() {
-  const ocrSection = document.getElementById("ocrResultSection");
+function _clearResultsOnly() {
+  const ocrEditor  = document.getElementById("ocrActiveEditor");
+  const ocrPrompt  = document.getElementById("ocrEmptyPrompt");
   const mlSection  = document.getElementById("imgMlResultSection");
   const placeHolder = document.getElementById("imgResultPlaceholder");
 
-  if (ocrSection) {
-    ocrSection.innerHTML = "";
-    ocrSection.classList.add("d-none");
+  if (ocrEditor) {
+    ocrEditor.innerHTML = "";
+    ocrEditor.classList.add("d-none");
+  }
+  if (ocrPrompt) {
+    ocrPrompt.classList.remove("d-none");
   }
   if (mlSection) {
     mlSection.innerHTML = "";
@@ -178,13 +184,8 @@ function _clearImageResults() {
   }
 }
 
-function bindImgClearBtn() {
-  const btn = document.getElementById("imgClearBtn");
-  if (btn) btn.addEventListener("click", _clearImage);
-}
-
 /* ══════════════════════════════════════════════════════════════
-   ANALYSE IMAGE BUTTON
+   ANALYSE BUTTON
 ══════════════════════════════════════════════════════════════ */
 function bindImgAnalyzeBtn() {
   const btn = document.getElementById("imgAnalyzeBtn");
@@ -193,16 +194,16 @@ function bindImgAnalyzeBtn() {
 
 async function analyzeImage() {
   if (!_selectedImageFile) {
-    showToast("Please select or drop an email screenshot first.", "warning");
+    showToast("Please upload an email screenshot first.", "warning");
     return;
   }
 
-  showSpinner(true, "Processing Email Screenshot…", [
-    "Validating image file & headers",
-    "Applying grayscale & CLAHE noise reduction",
-    "Extracting text via Tesseract OCR",
-    "Running NLP text cleaning & TF-IDF",
-    "LinearSVC model prediction & risk scoring",
+  showSpinner(true, "Scanning Email Screenshot…", [
+    "Validating image dimensions & format",
+    "Applying OpenCV grayscale & noise reduction",
+    "Extracting text via Tesseract OCR engine",
+    "Running NLP tokenisation & TF-IDF vectorisation",
+    "Executing LinearSVC classification & risk analysis",
   ]);
 
   const formData = new FormData();
@@ -232,7 +233,6 @@ async function analyzeImage() {
     renderImageResults(data);
     showToast("Email screenshot analysed successfully!", "success");
 
-    // On small screens, scroll down to the results column smoothly
     if (window.innerWidth < 992) {
       document.getElementById("imgMlResultSection")?.scrollIntoView({ behavior: "smooth" });
     }
@@ -244,7 +244,7 @@ async function analyzeImage() {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   RE-ANALYSE EDITED OCR TEXT
+   RE-ANALYSE EDITED TEXT
 ══════════════════════════════════════════════════════════════ */
 async function reanalyzeEditedText() {
   const ta = document.getElementById("ocrEditableText");
@@ -252,15 +252,15 @@ async function reanalyzeEditedText() {
 
   const text = ta.value.trim();
   if (!text) {
-    showToast("Extracted text area is empty. Please enter text to analyse.", "warning");
+    showToast("Extracted text is empty. Please enter text to classify.", "warning");
     return;
   }
 
-  showSpinner(true, "Re-analysing Edited Text…", [
-    "Running NLP text preprocessing",
+  showSpinner(true, "Re-analysing Edited Content…", [
+    "Preprocessing edited text content",
     "Extracting 5,000 TF-IDF features",
-    "LinearSVC model classification",
-    "Phishing pattern & risk score analysis",
+    "Executing LinearSVC model inference",
+    "Updating security metrics & risk index",
   ]);
 
   try {
@@ -283,8 +283,8 @@ async function reanalyzeEditedText() {
       return;
     }
 
-    // Update ML result in Right Column (keep user's edited text in Left Column)
     renderMlResultForImage(data, text);
+    _updateCounts(text);
     showToast("Classification updated from edited text!", "success");
 
     if (window.innerWidth < 992) {
@@ -304,22 +304,29 @@ function renderImageResults(data) {
   _originalOcrText = data.ocrText || "";
   _lastImageAnalysisData = data;
 
-  // Hide placeholder in right column
+  // 1. Hide placeholder in right column
   document.getElementById("imgResultPlaceholder")?.classList.add("d-none");
 
-  // Render OCR Editor in Left Column
-  _renderOcrSection(data);
+  // 2. Render Left Column: OCR Editor in place
+  _renderOcrEditor(data);
 
-  // Render ML Prediction in Right Column
+  // 3. Render Right Column: Detection Workspace
   renderMlResultForImage(data, data.ocrText || "");
 }
 
-/* ── LEFT COLUMN: Render OCR Text Editor ────────────────────── */
-function _renderOcrSection(data) {
-  const section = document.getElementById("ocrResultSection");
-  if (!section) return;
+/* ── LEFT COLUMN: Render OCR Text Workspace ────────────────── */
+function _renderOcrEditor(data) {
+  const prompt = document.getElementById("ocrEmptyPrompt");
+  const editor = document.getElementById("ocrActiveEditor");
+  if (!editor) return;
 
-  // OCR confidence bar
+  prompt?.classList.add("d-none");
+  editor.classList.remove("d-none");
+
+  const words = data.wordCount || (data.ocrText ? data.ocrText.trim().split(/\s+/).length : 0);
+  const urls = (data.urlAnalysis?.count) ?? (data.emailFields?.urls_found?.length || 0);
+
+  // Confidence bar
   const conf = data.ocrConfidence;
   const confAvail = data.ocrConfidenceAvailable && conf !== null;
   const confColor = conf === null ? "var(--gray-400)"
@@ -328,16 +335,16 @@ function _renderOcrSection(data) {
     : "var(--danger)";
 
   const confHtml = confAvail
-    ? `<div class="ocr-confidence-row">
-         <span style="font-weight:600;font-size:.76rem">OCR Quality:</span>
-         <div class="ocr-conf-bar-wrap">
-           <div class="ocr-conf-bar" style="width:${conf}%;background:${confColor}"></div>
-         </div>
-         <span style="color:${confColor};font-weight:700;font-size:.78rem">${conf}%</span>
+    ? `<div class="d-flex align-items-center justify-content-between mb-1" style="font-size:.74rem">
+         <span class="text-muted-sm fw-600">OCR Recognition Confidence:</span>
+         <span style="color:${confColor};font-weight:700">${conf}%</span>
+       </div>
+       <div class="ocr-conf-bar-wrap mb-2">
+         <div class="ocr-conf-bar" style="width:${conf}%;background:${confColor}"></div>
        </div>`
     : "";
 
-  // Detected email metadata tags
+  // Metadata pills
   const fields = data.emailFields || {};
   const metaPills = [];
   if (fields.sender) {
@@ -354,51 +361,37 @@ function _renderOcrSection(data) {
     ? `<div class="d-flex flex-column gap-1 mb-2">${metaPills.join("")}</div>`
     : "";
 
-  const words = data.wordCount || (data.ocrText ? data.ocrText.trim().split(/\s+/).length : 0);
-  const chars = data.charCount || (data.ocrText ? data.ocrText.length : 0);
-
-  section.innerHTML = `
-    <div class="card">
-      <div class="card-header-bar">
-        <span><i class="bi bi-pencil-square me-2 text-navy"></i>Extracted Text (OCR)</span>
-        <span class="text-muted-sm" id="ocrCountsBadge">${words} words · ${chars} chars</span>
+  editor.innerHTML = `
+    <div class="p-2 border rounded bg-white shadow-2xs">
+      <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom">
+        <span class="fw-700 text-navy" style="font-size:.8rem">
+          <i class="bi bi-file-text me-1"></i>Extracted Text Content
+        </span>
+        <span class="badge bg-light text-navy border" id="ocrCountsBadge" style="font-size:.7rem;font-weight:600">
+          ${words} words · ${urls} URLs
+        </span>
       </div>
-      <div class="card-body-pad d-flex flex-column gap-2">
 
-        ${confHtml}
-        ${metadataHtml}
+      ${confHtml}
+      ${metadataHtml}
 
-        <div class="d-flex justify-content-between align-items-center">
-          <label for="ocrEditableText" class="fw-600" style="font-size:.8rem;color:var(--gray-700)">
-            Editable Text Content:
-          </label>
-          <span class="text-muted-sm" style="font-size:.72rem">Edit to correct OCR typos</span>
-        </div>
+      <textarea id="ocrEditableText" class="ocr-textarea" rows="6"
+        placeholder="Extracted email text...">${escHtml(data.ocrText || "")}</textarea>
 
-        <textarea id="ocrEditableText" class="ocr-textarea" rows="7"
-          placeholder="Extracted email text will appear here…">${escHtml(data.ocrText || "")}</textarea>
+      <div class="d-flex gap-2 mt-2">
+        <button class="btn-primary-navy flex-grow-1 justify-content-center py-1" id="reanalyzeBtn" style="font-size:.8rem">
+          <i class="bi bi-arrow-repeat me-1"></i>Re-analyse Edited Text
+        </button>
+        <button class="btn-outline-navy py-1 px-2" id="resetOcrBtn" title="Reset to initial OCR text" style="font-size:.8rem">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+        </button>
+      </div>
 
-        <!-- Action buttons row -->
-        <div class="d-flex gap-2 mt-1">
-          <button class="btn-primary-navy flex-grow-1 justify-content-center" id="reanalyzeBtn" style="font-size:.82rem;padding:.45rem .8rem">
-            <i class="bi bi-arrow-repeat"></i>
-            Re-analyse Edited Text
-          </button>
-          <button class="btn-outline-navy" id="resetOcrBtn" title="Reset to original OCR extraction" style="font-size:.82rem;padding:.45rem .75rem">
-            <i class="bi bi-arrow-counterclockwise"></i>
-            Reset
-          </button>
-        </div>
-
-        <div class="confidence-note-box mt-1">
-          <i class="bi bi-shield-check text-navy me-1"></i>
-          <strong>Separate Metrics:</strong> OCR Confidence measures character recognition clarity. ML Confidence measures LinearSVC spam certainty.
-        </div>
-
+      <div class="confidence-note-box mt-2">
+        <i class="bi bi-info-circle me-1 text-navy"></i>
+        <span><strong>OCR Confidence:</strong> Measures character clarity. <strong>ML Confidence:</strong> Measures LinearSVC spam certainty.</span>
       </div>
     </div>`;
-
-  section.classList.remove("d-none");
 
   // Bind actions
   document.getElementById("reanalyzeBtn")?.addEventListener("click", reanalyzeEditedText);
@@ -406,21 +399,25 @@ function _renderOcrSection(data) {
     const ta = document.getElementById("ocrEditableText");
     if (ta) {
       ta.value = _originalOcrText;
-      showToast("Reset to original OCR text.", "info");
+      _updateCounts(_originalOcrText);
+      showToast("Reset to original OCR extraction.", "info");
     }
   });
 
-  // Dynamic character/word counter on input
   document.getElementById("ocrEditableText")?.addEventListener("input", (e) => {
-    const val = e.target.value;
-    const w = val.trim() ? val.trim().split(/\s+/).length : 0;
-    const c = val.length;
-    const badge = document.getElementById("ocrCountsBadge");
-    if (badge) badge.textContent = `${w} words · ${c} chars`;
+    _updateCounts(e.target.value);
   });
 }
 
-/* ── RIGHT COLUMN: Render ML Prediction & Risk Results ─────── */
+function _updateCounts(text) {
+  const badge = document.getElementById("ocrCountsBadge");
+  if (!badge) return;
+  const w = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const urlMatches = text.match(/https?:\/\/[^\s<>\"]+|www\.[^\s<>\"]+/gi) || [];
+  badge.textContent = `${w} words · ${urlMatches.length} URLs`;
+}
+
+/* ── RIGHT COLUMN: Render Detection Workspace ──────────────── */
 function renderMlResultForImage(data, rawText) {
   _lastImageAnalysisData = data;
   const section = document.getElementById("imgMlResultSection");
@@ -434,157 +431,175 @@ function renderMlResultForImage(data, rawText) {
   const offset = circumference - ((data.riskScore || 0) / 100) * circumference;
 
   const highlightedBody = highlightWords(rawText, data.highlightedWords || []);
-  const urlSection = buildUrlSection(data.urlAnalysis);
 
-  const phishSection = data.phishingDetected
-    ? `<div class="phish-alert mb-3">
-        <i class="bi bi-exclamation-triangle-fill flex-shrink-0 fs-5"></i>
+  // ── A. Prediction Summary Header & 4-Metric Grid ──
+  const sourceLabel = data.analysisType === "image_edited"
+    ? "Edited OCR Text"
+    : "Direct OCR Extraction";
+
+  const summarySection = `
+    <!-- A. Prediction Summary Header -->
+    <div class="result-header ${colorClass} d-flex align-items-center justify-content-between flex-wrap gap-2 p-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="status-icon-box ${colorClass}">
+          <i class="bi ${icon} fs-3"></i>
+        </div>
         <div>
-          <strong style="font-size:.84rem">Phishing Indicators Detected</strong>
-          <div class="mt-1" style="font-size:.78rem;line-height:1.6">
-            ${(data.phishingPatterns || []).map((p) => `<div>• ${escHtml(p)}</div>`).join("")}
+          <div class="d-flex align-items-center gap-2">
+            <span class="result-label ${colorClass}">${data.prediction.toUpperCase()}</span>
+            <span class="badge bg-white text-navy border" style="font-size:.7rem;font-weight:600">
+              <i class="bi bi-cpu me-1"></i>${sourceLabel}
+            </span>
+          </div>
+          <div class="text-muted-sm mt-1" style="font-size:.78rem">
+            ${isSpam ? "High-probability malicious or promotional spam content detected." : "Legitimate conversational email verified."}
           </div>
         </div>
-      </div>`
-    : "";
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-navy" id="newAnalysisBtnTop" style="font-size:.78rem">
+          <i class="bi bi-plus-circle me-1"></i>New Analysis
+        </button>
+        <div class="confidence-pill" style="font-size:.82rem">${data.confidence}% ML Confidence</div>
+      </div>
+    </div>
 
+    <!-- 4 Key Metric Cards & Risk Meter -->
+    <div class="row g-2 p-3 border-bottom bg-white align-items-center">
+      <!-- Circular Risk Meter -->
+      <div class="col-auto">
+        <div class="risk-ring-wrap" style="transform:scale(.95)">
+          <div class="risk-ring">
+            <svg width="90" height="90" viewBox="0 0 110 110">
+              <circle class="risk-ring-bg" cx="55" cy="55" r="44"/>
+              <circle class="risk-ring-fill ${riskClass}"
+                cx="55" cy="55" r="44"
+                stroke-dasharray="${circumference}"
+                stroke-dashoffset="${circumference}"
+                id="imgRiskRingFill"/>
+            </svg>
+            <div class="risk-ring-text">
+              <span id="imgRiskScoreNum" style="font-size:1.25rem">0</span>
+              <small style="font-size:.65rem">/100</small>
+            </div>
+          </div>
+          <span class="risk-status-label ${riskClass} mt-1">${data.riskStatus || (isSpam ? "High Risk" : "Safe")}</span>
+        </div>
+      </div>
+
+      <!-- 4 Compact Metric Tiles -->
+      <div class="col">
+        <div class="row g-2">
+          <div class="col-6 col-sm-3">
+            <div class="p-2 rounded bg-light border text-center">
+              <div class="text-muted-sm" style="font-size:.68rem">Verdict</div>
+              <div class="fw-700 ${isSpam ? "text-danger" : "text-success"}" style="font-size:.88rem">${data.prediction}</div>
+            </div>
+          </div>
+          <div class="col-6 col-sm-3">
+            <div class="p-2 rounded bg-light border text-center">
+              <div class="text-muted-sm" style="font-size:.68rem">Confidence</div>
+              <div class="fw-700 text-navy" style="font-size:.88rem">${data.confidence}%</div>
+            </div>
+          </div>
+          <div class="col-6 col-sm-3">
+            <div class="p-2 rounded bg-light border text-center">
+              <div class="text-muted-sm" style="font-size:.68rem">Risk Score</div>
+              <div class="fw-700" style="font-size:.88rem">${data.riskScore}/100</div>
+            </div>
+          </div>
+          <div class="col-6 col-sm-3">
+            <div class="p-2 rounded bg-light border text-center">
+              <div class="text-muted-sm" style="font-size:.68rem">URLs Found</div>
+              <div class="fw-700" style="font-size:.88rem">${data.urlAnalysis?.count ?? 0}</div>
+            </div>
+          </div>
+        </div>
+        <div class="text-muted-sm mt-1" style="font-size:.68rem;line-height:1.4">
+          <i class="bi bi-info-circle me-1"></i>Confidence calculated from LinearSVC decision margin via sigmoid estimation.
+        </div>
+      </div>
+    </div>`;
+
+  // ── B. Security Indicators (Only Relevant Warnings) ──
+  const indicators = _buildSecurityIndicators(data);
+
+  // ── C. Explainability Section ──
   const reasonsHtml = (data.reasons || []).map((r) => `
     <div class="reason-item ${isSpam ? "" : "ham"}">
       <i class="bi ${isSpam ? "bi-x-circle-fill text-danger" : "bi-check-circle-fill text-success"}"></i>
       <span>${escHtml(r)}</span>
     </div>`).join("");
 
-  const sourceBadge = data.analysisType === "image_edited"
-    ? `<span class="badge bg-light text-navy border" style="font-weight:500;font-size:.72rem"><i class="bi bi-pencil me-1"></i>From Edited OCR Text</span>`
-    : `<span class="badge bg-light text-navy border" style="font-weight:500;font-size:.72rem"><i class="bi bi-image me-1"></i>From OCR Extraction</span>`;
+  const explainSection = `
+    <div class="mb-3">
+      <div class="fw-700 mb-2 d-flex align-items-center gap-1" style="font-size:.82rem;color:var(--navy-dark)">
+        <i class="bi bi-lightbulb text-navy"></i>
+        <span>Explainability — Classification Factors</span>
+      </div>
+      <div class="d-flex flex-column gap-1">
+        ${reasonsHtml}
+      </div>
+    </div>`;
+
+  // ── D. Collapsible Extracted Content with Threat Highlights ──
+  const collapsibleContent = `
+    <details class="extracted-content-accordion mb-3" open>
+      <summary class="d-flex justify-content-between align-items-center p-2 rounded bg-light border cursor-pointer">
+        <span class="fw-600" style="font-size:.82rem;color:var(--navy-dark)">
+          <i class="bi bi-file-earmark-text me-1 text-navy"></i>Extracted Email Content &amp; Threat Highlights
+        </span>
+        <span class="text-muted-sm d-flex align-items-center gap-1" style="font-size:.7rem">
+          <span>Toggle view</span>
+          <i class="bi bi-chevron-down"></i>
+        </span>
+      </summary>
+      <div class="mt-2 email-body-display p-2 rounded border"
+           style="background:var(--gray-50);font-size:.79rem;line-height:1.65;max-height:150px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;">
+        ${highlightedBody || escHtml(rawText)}
+      </div>
+    </details>`;
+
+  // ── E. Action Toolbar ──
+  const toolbar = `
+    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+      <button class="btn btn-sm btn-outline-navy" id="newAnalysisBtnBottom">
+        <i class="bi bi-plus-circle me-1"></i>New Analysis
+      </button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="copyImageAnalysisResult()">
+          <i class="bi bi-clipboard me-1"></i>Copy Report
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+          <i class="bi bi-printer me-1"></i>Print Report
+        </button>
+      </div>
+    </div>`;
 
   section.innerHTML = `
-    <div class="result-card">
-      <!-- 1. Header Banner -->
-      <div class="result-header ${colorClass} d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-3">
-          <i class="bi ${icon} fs-2 ${isSpam ? "text-danger" : "text-success"}"></i>
-          <div>
-            <div class="result-label ${colorClass}">${data.prediction.toUpperCase()}</div>
-            <div class="text-muted-sm" style="font-size:.78rem">
-              ${isSpam ? "Unsolicited or malicious spam detected" : "Legitimate email content verified"}
-            </div>
-          </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-          ${sourceBadge}
-          <div class="confidence-pill" style="font-size:.82rem">${data.confidence}% ML Confidence</div>
-        </div>
-      </div>
-
-      <!-- 2. Body Grid -->
+    <div class="result-card shadow-sm">
+      ${summarySection}
       <div class="p-3">
-        <!-- Top Metrics Row with Risk Ring Gauge -->
-        <div class="row g-3 align-items-center mb-3">
-          <!-- Risk score gauge -->
-          <div class="col-auto">
-            <div class="risk-ring-wrap">
-              <div class="risk-ring">
-                <svg width="100" height="100" viewBox="0 0 110 110">
-                  <circle class="risk-ring-bg" cx="55" cy="55" r="44"/>
-                  <circle class="risk-ring-fill ${riskClass}"
-                    cx="55" cy="55" r="44"
-                    stroke-dasharray="${circumference}"
-                    stroke-dashoffset="${circumference}"
-                    id="imgRiskRingFill"/>
-                </svg>
-                <div class="risk-ring-text">
-                  <span id="imgRiskScoreNum" style="font-size:1.35rem">0</span>
-                  <small style="font-size:.65rem">/100</small>
-                </div>
-              </div>
-              <span class="risk-status-label ${riskClass} mt-1">${data.riskStatus || (isSpam ? "High Risk" : "Safe")}</span>
-            </div>
-          </div>
-
-          <!-- Key metric cards -->
-          <div class="col">
-            <div class="row g-2">
-              <div class="col-6 col-sm-3">
-                <div class="p-2 rounded bg-light border text-center">
-                  <div class="text-muted-sm" style="font-size:.7rem">Classification</div>
-                  <div class="fw-700 ${isSpam ? "text-danger" : "text-success"}" style="font-size:.9rem">${data.prediction}</div>
-                </div>
-              </div>
-              <div class="col-6 col-sm-3">
-                <div class="p-2 rounded bg-light border text-center">
-                  <div class="text-muted-sm" style="font-size:.7rem">ML Confidence</div>
-                  <div class="fw-700 text-navy" style="font-size:.9rem">${data.confidence}%</div>
-                </div>
-              </div>
-              <div class="col-6 col-sm-3">
-                <div class="p-2 rounded bg-light border text-center">
-                  <div class="text-muted-sm" style="font-size:.7rem">Risk Index</div>
-                  <div class="fw-700" style="font-size:.9rem">${data.riskScore}/100</div>
-                </div>
-              </div>
-              <div class="col-6 col-sm-3">
-                <div class="p-2 rounded bg-light border text-center">
-                  <div class="text-muted-sm" style="font-size:.7rem">URLs Found</div>
-                  <div class="fw-700" style="font-size:.9rem">${data.urlAnalysis?.count ?? 0}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- LinearSVC confidence note -->
-            <div class="text-muted-sm mt-2" style="font-size:.72rem;line-height:1.5">
-              <i class="bi bi-info-circle me-1"></i>Confidence is estimated from the LinearSVC hyperplane distance via sigmoid transform.
-            </div>
-          </div>
-        </div>
-
-        <!-- Phishing Alert Section (conditional) -->
-        ${phishSection}
-
-        <!-- Explainability (XAI) Reasons -->
-        <div class="mb-3">
-          <div class="fw-600 mb-2 d-flex align-items-center gap-1" style="font-size:.84rem;color:var(--navy-dark)">
-            <i class="bi bi-lightbulb text-navy"></i>
-            <span>Explainable AI — Classification Factors</span>
-          </div>
-          <div class="d-flex flex-column gap-1">
-            ${reasonsHtml}
-          </div>
-        </div>
-
-        <!-- URL Analysis (if URLs detected) -->
-        ${urlSection ? `<div class="mb-3">${urlSection}</div>` : ""}
-
-        <!-- Highlighted Extracted Content Display -->
-        <div class="mb-3">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="fw-600" style="font-size:.84rem;color:var(--navy-dark)">
-              <i class="bi bi-file-text me-1 text-navy"></i>Analysed Text Content
-            </span>
-            <span class="text-muted-sm" style="font-size:.72rem">Suspicious terms highlighted</span>
-          </div>
-          <div class="email-body-display p-2 rounded border"
-               style="background:var(--gray-50);font-size:.8rem;line-height:1.7;max-height:160px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;">
-            ${highlightedBody || escHtml(rawText)}
-          </div>
-        </div>
-
-        <!-- Action Toolbar -->
-        <div class="d-flex justify-content-end gap-2 pt-2 border-top">
-          <button class="btn btn-sm btn-outline-secondary" onclick="copyImageAnalysisResult()">
-            <i class="bi bi-clipboard me-1"></i>Copy Result
-          </button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="printImageAnalysisResult()">
-            <i class="bi bi-printer me-1"></i>Print Report
-          </button>
-        </div>
-
+        ${indicators}
+        ${explainSection}
+        ${collapsibleContent}
+        ${toolbar}
       </div>
     </div>`;
 
   section.classList.remove("d-none");
 
-  // Animate risk ring and counter
+  // Bind New Analysis buttons
+  document.getElementById("newAnalysisBtnTop")?.addEventListener("click", () => {
+    _clearImageWorkspace();
+    document.getElementById("imgDropZone")?.scrollIntoView({ behavior: "smooth" });
+  });
+  document.getElementById("newAnalysisBtnBottom")?.addEventListener("click", () => {
+    _clearImageWorkspace();
+    document.getElementById("imgDropZone")?.scrollIntoView({ behavior: "smooth" });
+  });
+
+  // Animate risk meter
   requestAnimationFrame(() => {
     setTimeout(() => {
       const ring = document.getElementById("imgRiskRingFill");
@@ -604,35 +619,117 @@ function renderMlResultForImage(data, rawText) {
   });
 }
 
+/* ── Build Security Indicators Row (Only relevant flags) ───── */
+function _buildSecurityIndicators(data) {
+  const flags = [];
+
+  // 1. Phishing Warning
+  if (data.phishingDetected) {
+    flags.push(`
+      <div class="security-flag-card danger">
+        <div class="d-flex align-items-start gap-2">
+          <i class="bi bi-exclamation-triangle-fill text-danger fs-5 flex-shrink-0"></i>
+          <div>
+            <div class="fw-700 text-danger" style="font-size:.82rem">Phishing Signatures Detected</div>
+            <div class="mt-1" style="font-size:.76rem;color:var(--gray-700)">
+              ${(data.phishingPatterns || []).map((p) => `<div>• ${escHtml(p)}</div>`).join("")}
+            </div>
+          </div>
+        </div>
+      </div>`);
+  }
+
+  // 2. Financial Reward / Money Urgency
+  const reasonsStr = (data.reasons || []).join(" ").toLowerCase();
+  if (reasonsStr.includes("financial reward")) {
+    flags.push(`
+      <div class="security-flag-chip warning">
+        <i class="bi bi-cash-coin me-1"></i>
+        <span>Financial Incentive / Prize Claim Language</span>
+      </div>`);
+  }
+  if (reasonsStr.includes("urgency-related")) {
+    flags.push(`
+      <div class="security-flag-chip danger">
+        <i class="bi bi-alarm me-1"></i>
+        <span>High-Pressure Urgency Tactics Detected</span>
+      </div>`);
+  }
+  if (reasonsStr.includes("suspicious security-related") || reasonsStr.includes("obfuscated text")) {
+    flags.push(`
+      <div class="security-flag-chip danger">
+        <i class="bi bi-key me-1"></i>
+        <span>Credential / Account Security Deception</span>
+      </div>`);
+  }
+
+  // 3. URLs Analysis
+  const urlData = data.urlAnalysis || {};
+  if (urlData.shortened > 0) {
+    flags.push(`
+      <div class="security-flag-chip danger">
+        <i class="bi bi-link-45deg me-1"></i>
+        <span>Shortened Link Detected (${urlData.shortened} URL)</span>
+      </div>`);
+  } else if (urlData.suspicious > 0) {
+    flags.push(`
+      <div class="security-flag-chip warning">
+        <i class="bi bi-globe2 me-1"></i>
+        <span>Suspicious Domain Detected</span>
+      </div>`);
+  }
+
+  // Clean state
+  if (flags.length === 0) {
+    return `
+      <div class="security-flag-card success mb-3">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-shield-check text-success fs-5"></i>
+          <div>
+            <span class="fw-700 text-success" style="font-size:.82rem">Zero Malicious Indicators Detected</span>
+            <span class="text-muted-sm ms-2" style="font-size:.74rem">No deceptive links, phishing patterns, or artificial urgency found.</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="mb-3">
+      <div class="fw-700 mb-2 d-flex align-items-center gap-1" style="font-size:.82rem;color:var(--navy-dark)">
+        <i class="bi bi-shield-exclamation text-navy"></i>
+        <span>Active Threat Indicators</span>
+      </div>
+      <div class="d-flex flex-column gap-2">
+        ${flags.join("")}
+      </div>
+    </div>`;
+}
+
 /* ══════════════════════════════════════════════════════════════
-   TOOLBAR ACTIONS: COPY & PRINT
+   TOOLBAR ACTIONS
 ══════════════════════════════════════════════════════════════ */
 function copyImageAnalysisResult() {
   if (!_lastImageAnalysisData) return;
   const d = _lastImageAnalysisData;
   const summary = [
-    `=== AI Email Spam Classifier — Image Analysis Report ===`,
+    `=== AI Email Spam Classifier — Security Report ===`,
     `Prediction: ${d.prediction}`,
     `ML Confidence: ${d.confidence}%`,
     `Risk Score: ${d.riskScore}/100 (${d.riskStatus})`,
     `Phishing Detected: ${d.phishingDetected ? "YES" : "NO"}`,
     `URLs Found: ${d.urlAnalysis?.count || 0}`,
-    `Reasons: ${(d.reasons || []).join(" | ")}`,
+    `Factors: ${(d.reasons || []).join(" | ")}`,
   ].join("\n");
 
   navigator.clipboard.writeText(summary).then(() => {
-    showToast("Analysis summary copied to clipboard!", "success");
+    showToast("Security summary copied to clipboard!", "success");
   }).catch(() => {
-    showToast("Failed to copy to clipboard.", "warning");
+    showToast("Failed to copy report.", "warning");
   });
 }
 
-function printImageAnalysisResult() {
-  window.print();
-}
-
 /* ══════════════════════════════════════════════════════════════
-   SPINNER OVERRIDE (Animated pipeline step list)
+   SPINNER WITH PIPELINE STEPS
 ══════════════════════════════════════════════════════════════ */
 function showSpinner(visible, title = "Analysing Email…", steps = []) {
   const overlay = document.getElementById("spinnerOverlay");
@@ -665,7 +762,7 @@ function showSpinner(visible, title = "Analysing Email…", steps = []) {
                 : "bi bi-circle";
             }
           });
-        }, i * 500);
+        }, i * 450);
       });
     }
   } else {
