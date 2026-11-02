@@ -1675,14 +1675,141 @@ mark.spam-word {
 .ocr-pipeline-steps li.step-active { color: var(--navy); font-weight: 600; }
 .ocr-pipeline-steps li.step-error  { color: var(--danger); }
 
-/* ── SaaS Dashboard UI Enhancements for Image Analysis ──── */
+/* ── Horizontal Pipeline Stepper ────────────────────────── */
+.img-pipeline-stepper {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: .5rem .75rem;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.img-pipeline-stepper::-webkit-scrollbar {
+  height: 4px;
+}
+
+.img-pipeline-stepper::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 4px;
+}
+
+.stepper-track {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: max-content;
+}
+
+.stepper-item {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+
+.stepper-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--navy-50, #eff5f9);
+  color: var(--navy);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .72rem;
+  flex-shrink: 0;
+}
+
+.stepper-label {
+  color: var(--gray-700);
+}
+
+.stepper-arrow {
+  color: var(--gray-400);
+  font-size: .7rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Compact Image Details Box ──────────────────────────── */
+.image-details-box {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  padding: .5rem .65rem;
+  font-size: .73rem;
+}
+
+.image-details-header {
+  font-weight: 700;
+  color: var(--navy-dark);
+  margin-bottom: .35rem;
+  font-size: .74rem;
+  display: flex;
+  align-items: center;
+}
+
+.image-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .35rem .6rem;
+}
+
+.image-detail-item {
+  display: flex;
+  align-items: baseline;
+  gap: .3rem;
+  overflow: hidden;
+}
+
+.image-detail-item .detail-label {
+  color: var(--gray-500);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.image-detail-item .detail-val {
+  color: var(--gray-800);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Workspace Row & Natural Card Height Constraints ───── */
+#section-image-analyze .image-workspace-row {
+  align-items: flex-start !important;
+}
+
+#section-image-analyze .image-workspace-row > [class*="col-"] {
+  align-self: flex-start !important;
+}
+
 .email-input-workspace-card {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   background: var(--white);
   transition: box-shadow var(--transition);
+  height: auto !important;
+  min-height: unset !important;
+  max-height: none !important;
+  align-self: flex-start !important;
 }
+
+.email-input-workspace-card .card-body-pad {
+  height: auto !important;
+}
+
+#imgResultPlaceholder {
+  min-height: 320px;
+}
+
 
 .status-icon-box {
   width: 44px;

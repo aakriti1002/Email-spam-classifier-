@@ -30,12 +30,14 @@ async function checkOcrStatus() {
   try {
     const res = await fetch("/api/ocr-status");
     const data = await res.json();
+    const engineEl = document.getElementById("imgDetailEngine");
     if (data.ready) {
       banner.innerHTML = `
         <span class="ocr-status-badge ocr-success">
           <i class="bi bi-shield-check"></i>
           OCR Engine Active ${data.tesseract_version ? "· v" + data.tesseract_version : ""}
         </span>`;
+      if (engineEl) engineEl.textContent = `Tesseract v${(data.tesseract_version || "5").split(".")[0] || "5"} (Ready)`;
     } else {
       const missing = [];
       if (!data.pillow) missing.push("Pillow");
@@ -46,6 +48,7 @@ async function checkOcrStatus() {
           <i class="bi bi-exclamation-triangle-fill"></i>
           OCR Engine: ${missing.join(", ")} missing
         </span>`;
+      if (engineEl) engineEl.textContent = "Offline (Missing dependencies)";
     }
   } catch {
     banner.innerHTML = `
@@ -120,11 +123,34 @@ function _loadImageFile(file) {
   const placeholder = document.getElementById("imgDropPlaceholder");
   const analyzeBtn  = document.getElementById("imgAnalyzeBtn");
 
+  // Populate real image details
+  const detailsBox = document.getElementById("imageDetailsBox");
+  const nameEl     = document.getElementById("imgDetailName");
+  const sizeEl     = document.getElementById("imgDetailSize");
+  const dimEl      = document.getElementById("imgDetailDimensions");
+
+  if (nameEl) {
+    nameEl.textContent = file.name;
+    nameEl.title = file.name;
+  }
+  if (sizeEl) {
+    const kb = (file.size / 1024).toFixed(1);
+    const ext = (file.type || "image").replace("image/", "").toUpperCase();
+    sizeEl.textContent = `${kb} KB · ${ext}`;
+  }
+  if (dimEl) dimEl.textContent = "Loading…";
+  if (detailsBox) detailsBox.classList.remove("d-none");
+
   const reader = new FileReader();
   reader.onload = (e) => {
     if (preview) {
       preview.src = e.target.result;
       preview.style.display = "block";
+      const tempImg = new Image();
+      tempImg.onload = () => {
+        if (dimEl) dimEl.textContent = `${tempImg.naturalWidth} × ${tempImg.naturalHeight} px`;
+      };
+      tempImg.src = e.target.result;
     }
     previewW?.classList.remove("d-none");
     placeholder?.classList.add("d-none");
@@ -148,6 +174,7 @@ function _clearImageWorkspace() {
   const placeholder = document.getElementById("imgDropPlaceholder");
   const input       = document.getElementById("imgFileInput");
   const analyzeBtn  = document.getElementById("imgAnalyzeBtn");
+  const detailsBox  = document.getElementById("imageDetailsBox");
 
   if (preview) {
     preview.src = "";
@@ -158,6 +185,7 @@ function _clearImageWorkspace() {
   zone?.classList.remove("has-image");
   if (input) input.value = "";
   if (analyzeBtn) analyzeBtn.disabled = true;
+  if (detailsBox) detailsBox.classList.add("d-none");
 
   _clearResultsOnly();
 }
