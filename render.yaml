@@ -1,0 +1,37 @@
+# render.yaml
+# -----------
+# Render deployment configuration for the AI Email Spam Classifier.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: email-spam-classifier
+    runtime: python
+    region: singapore          # closest to India; change to oregon / frankfurt if preferred
+    plan: free                 # change to starter ($7/mo) for persistent disk support
+    buildCommand: "pip install -r requirements.txt && python nltk_setup.py"
+    startCommand: "gunicorn app:app --workers 2 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: SECRET_KEY
+        generateValue: true    # Render auto-generates a secure random value
+      - key: FLASK_ENV
+        value: production
+
+# ── Storage note ────────────────────────────────────────────────────────────
+# Render free tier does NOT provide persistent disk.
+# The SQLite database.db (prediction history) will be reset on every deploy
+# or restart. This is a known limitation of the free plan.
+#
+# To enable persistence, upgrade to the Starter plan and add:
+#
+#   disk:
+#     name: spam-db
+#     mountPath: /data
+#     sizeGB: 1
+#
+# Then change DB_PATH in app.py to:
+#   DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "database.db"))
+# and set DB_PATH=/data/database.db in Render environment variables.
+# ────────────────────────────────────────────────────────────────────────────

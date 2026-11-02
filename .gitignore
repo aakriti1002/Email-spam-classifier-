@@ -65,6 +65,11 @@ Thumbs.db
 dataset/sms_spam.zip
 
 # ──────────────────────────────────────────
+# NLTK data (downloaded at build time on Render)
+# ──────────────────────────────────────────
+nltk_data/
+
+# ──────────────────────────────────────────
 # OS-generated files
 # ──────────────────────────────────────────
 .DS_Store

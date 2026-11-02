@@ -7,7 +7,15 @@ risk scoring, and XAI feature extraction.
 """
 
 import re
+import os
 import nltk
+
+# Register the project-local nltk_data/ directory so pre-downloaded
+# corpora (from the build step) are found at runtime on any platform.
+_NLTK_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nltk_data")
+if os.path.isdir(_NLTK_LOCAL) and _NLTK_LOCAL not in nltk.data.path:
+    nltk.data.path.insert(0, _NLTK_LOCAL)
+
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer, WordNetLemmatizer
 from nltk.tokenize import word_tokenize

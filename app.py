@@ -381,13 +381,14 @@ if __name__ == "__main__":
         subprocess.run([sys.executable, "train_model.py"], check=True)
         load_model()
 
+    port = int(os.environ.get("PORT", 5000))
     print("\n================================================")
     print("  AI Email Spam Classifier")
-    print("  URL: http://127.0.0.1:5000")
+    print(f"  URL: http://0.0.0.0:{port}")
     print("  Press CTRL+C to stop")
     print("================================================\n")
     try:
-        app.run(debug=False, host="0.0.0.0", port=5000)
+        app.run(debug=False, host="0.0.0.0", port=port)
     except KeyboardInterrupt:
         print("\n[*] Server stopped. Goodbye!")
         sys.exit(0)
