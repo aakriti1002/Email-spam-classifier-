@@ -6,18 +6,18 @@
 services:
   - type: web
     name: email-spam-classifier
-    runtime: python
+    runtime: docker
     region: singapore          # closest to India; change to oregon / frankfurt if preferred
     plan: free                 # change to starter ($7/mo) for persistent disk support
-    buildCommand: "(command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y tesseract-ocr libgl1 || true) && pip install -r requirements.txt && python nltk_setup.py"
-    startCommand: "gunicorn app:app --workers 2 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
       - key: SECRET_KEY
         generateValue: true    # Render auto-generates a secure random value
       - key: FLASK_ENV
         value: production
+      - key: PORT
+        value: 10000
 
 # ── Storage note ────────────────────────────────────────────────────────────
 # Render free tier does NOT provide persistent disk.
