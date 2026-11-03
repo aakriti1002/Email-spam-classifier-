@@ -25,6 +25,7 @@ import io
 import os
 import re
 import sys
+import shutil
 import logging
 import tempfile
 import platform
@@ -57,35 +58,111 @@ except ImportError:
 try:
     import pytesseract
     _PYTESSERACT_AVAILABLE = True
+except ImportError:
+    pass
 
-    # Locate Tesseract binary automatically if not already on PATH
-    if platform.system() == "Windows":
-        _WIN_PATHS = [
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Cross-Platform Tesseract Executable Resolution
+# ──────────────────────────────────────────────────────────────────────────────
+def resolve_tesseract_cmd() -> Optional[str]:
+    """
+    Locate the Tesseract OCR executable across Windows, Linux, and custom environments.
+
+    Search priority:
+      1. TESSERACT_CMD or TESSERACT_PATH environment variable override.
+      2. Known OS-specific installation paths (e.g. C:\\Program Files\\Tesseract-OCR\\tesseract.exe on Windows,
+         /usr/bin/tesseract on Linux/Render).
+      3. System PATH fallback via shutil.which().
+
+    Configures pytesseract.pytesseract.tesseract_cmd if a valid binary is found.
+    Returns the resolved executable path or None if not found.
+    """
+    if not _PYTESSERACT_AVAILABLE:
+        return None
+
+    resolved_path: Optional[str] = None
+
+    # 1. Environment variable override
+    env_cmd = os.environ.get("TESSERACT_CMD") or os.environ.get("TESSERACT_PATH")
+    if env_cmd:
+        if os.path.isfile(env_cmd):
+            resolved_path = os.path.abspath(env_cmd)
+        elif shutil.which(env_cmd):
+            resolved_path = shutil.which(env_cmd)
+
+    # 2. Known Windows paths
+    if not resolved_path and platform.system() == "Windows":
+        prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        prog_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        user_name = os.environ.get("USERNAME", "")
+
+        win_candidates = [
             r"C:\Program Files\Tesseract-OCR\tesseract.exe",
             r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-            r"C:\Users\{}\AppData\Local\Programs\Tesseract-OCR\tesseract.exe".format(
-                os.environ.get("USERNAME", "")
-            ),
+            os.path.join(prog_files, "Tesseract-OCR", "tesseract.exe"),
+            os.path.join(prog_files_x86, "Tesseract-OCR", "tesseract.exe"),
+            os.path.join(local_app_data, "Programs", "Tesseract-OCR", "tesseract.exe") if local_app_data else "",
+            rf"C:\Users\{user_name}\AppData\Local\Programs\Tesseract-OCR\tesseract.exe" if user_name else "",
         ]
-        for _p in _WIN_PATHS:
-            if os.path.exists(_p):
-                pytesseract.pytesseract.tesseract_cmd = _p
+        for p in win_candidates:
+            if p and os.path.isfile(p):
+                resolved_path = os.path.abspath(p)
                 break
-    else:
-        _LINUX_PATHS = [
+
+    # 3. Known Linux / Render / macOS paths
+    if not resolved_path and platform.system() != "Windows":
+        linux_candidates = [
             "/usr/bin/tesseract",
             "/usr/local/bin/tesseract",
             "/opt/render/project/src/bin/tesseract",
+            "/opt/render/project/src/.local/bin/tesseract",
+            "/opt/homebrew/bin/tesseract",
+            "/usr/local/opt/tesseract/bin/tesseract",
         ]
-        for _p in _LINUX_PATHS:
-            if os.path.exists(_p):
-                pytesseract.pytesseract.tesseract_cmd = _p
+        for p in linux_candidates:
+            if p and os.path.isfile(p):
+                resolved_path = p
                 break
-        if os.path.exists("/opt/render/project/src/tessdata"):
-            os.environ.setdefault("TESSDATA_PREFIX", "/opt/render/project/src/tessdata")
 
-except ImportError:
-    pass
+    # 4. System PATH fallback via shutil.which
+    if not resolved_path:
+        which_tess = shutil.which("tesseract") or shutil.which("tesseract.exe")
+        if which_tess and os.path.isfile(which_tess):
+            resolved_path = os.path.abspath(which_tess)
+
+    # 5. Check if pytesseract's existing tesseract_cmd is a valid file
+    if not resolved_path and getattr(pytesseract.pytesseract, "tesseract_cmd", None):
+        existing = pytesseract.pytesseract.tesseract_cmd
+        if existing and existing != "tesseract" and os.path.isfile(existing):
+            resolved_path = os.path.abspath(existing)
+
+    # Apply configuration to pytesseract
+    if resolved_path:
+        pytesseract.pytesseract.tesseract_cmd = resolved_path
+
+        # Configure TESSDATA_PREFIX on Linux/Render if custom tessdata directory exists
+        if platform.system() != "Windows":
+            tessdata_candidates = [
+                "/usr/share/tesseract-ocr/5/tessdata",
+                "/usr/share/tesseract-ocr/4.00/tessdata",
+                "/usr/share/tesseract-ocr/tessdata",
+                "/usr/local/share/tessdata",
+                "/opt/render/project/src/tessdata",
+                "/opt/render/project/src/.local/share/tessdata",
+            ]
+            for td in tessdata_candidates:
+                if os.path.isdir(td):
+                    os.environ.setdefault("TESSDATA_PREFIX", td)
+                    break
+
+    return resolved_path
+
+
+# Run resolution on module import
+if _PYTESSERACT_AVAILABLE:
+    resolve_tesseract_cmd()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -106,11 +183,13 @@ def check_ocr_availability() -> dict:
     tesseract_version = None
 
     if _PYTESSERACT_AVAILABLE:
+        # Dynamically ensure tesseract_cmd is resolved before version inspection
+        resolve_tesseract_cmd()
         try:
             tesseract_version = pytesseract.get_tesseract_version()
             tesseract_ok = True
         except Exception as exc:
-            logger.warning("Tesseract engine not found: %s", exc)
+            logger.warning("Tesseract engine check failed at %r: %s", getattr(pytesseract.pytesseract, "tesseract_cmd", "tesseract"), exc)
 
     return {
         "pillow": _PIL_AVAILABLE,
@@ -118,6 +197,7 @@ def check_ocr_availability() -> dict:
         "pytesseract": _PYTESSERACT_AVAILABLE,
         "tesseract_engine": tesseract_ok,
         "tesseract_version": str(tesseract_version) if tesseract_version else None,
+        "tesseract_cmd": getattr(pytesseract.pytesseract, "tesseract_cmd", None) if _PYTESSERACT_AVAILABLE else None,
         "ready": _PIL_AVAILABLE and _PYTESSERACT_AVAILABLE and tesseract_ok,
     }
 
@@ -330,6 +410,8 @@ def extract_text_from_image(raw_bytes: bytes) -> dict:
             "Run: pip install pytesseract"
         )
 
+    # Ensure Tesseract executable is resolved prior to availability check & execution
+    resolve_tesseract_cmd()
     avail = check_ocr_availability()
     if not avail["tesseract_engine"]:
         return _ocr_error(
